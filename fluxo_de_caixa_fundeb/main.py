@@ -12,11 +12,10 @@ from streamlit.components.v1 import html as components_html
 import hashlib
 
 
-# ------------------------------
-# Configurações e utilidades
-# ------------------------------
 
 APP_NAME = "Fluxo Diário FUNDEB"
+
+DEFAULT_TEST_LOCK_PASSWORD = "Marcel"
 
 
 def get_base_dir() -> str:
@@ -24,6 +23,21 @@ def get_base_dir() -> str:
 
 
 def get_data_dir() -> str:
+    
+    candidate = None
+    try:
+        if hasattr(st, "secrets") and isinstance(st.secrets, dict):
+            candidate = st.secrets.get("DATA_DIR") or st.secrets.get("APP_DATA_DIR")
+    except Exception:
+        candidate = None
+    if not candidate:
+        candidate = os.environ.get("DATA_DIR") or os.environ.get("APP_DATA_DIR")
+    if candidate:
+        path = os.path.expanduser(str(candidate)).strip()
+        if not os.path.isabs(path):
+            path = os.path.abspath(os.path.join(get_base_dir(), path))
+        os.makedirs(path, exist_ok=True)
+        return path
     path = os.path.join(get_base_dir(), "data")
     os.makedirs(path, exist_ok=True)
     return path
@@ -39,6 +53,61 @@ def get_exports_dir() -> str:
     path = os.path.join(get_base_dir(), "exports")
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def get_lock_password() -> str | None:
+
+    try:
+        if hasattr(st, "secrets") and isinstance(st.secrets, dict):
+            secret_val = st.secrets.get("LOCK_PASSWORD")
+            if secret_val:
+                return str(secret_val)
+    except Exception:
+        pass
+    
+    env_val = os.environ.get("LOCK_PASSWORD")
+    if env_val:
+        return str(env_val)
+   
+    return DEFAULT_TEST_LOCK_PASSWORD
+
+
+def month_key_from_date(d: date) -> str:
+    return f"{d.year:04d}-{d.month:02d}"
+
+
+def is_past_month(target: date, today: date | None = None) -> bool:
+    ref = today or date.today()
+    return (target.year, target.month) < (ref.year, ref.month)
+
+
+def is_month_unlocked(target: date) -> bool:
+    key = month_key_from_date(target)
+    months = st.session_state.get("unlocked_months", [])
+    return key in months
+
+
+def unlock_month_in_session(target: date) -> None:
+    key = month_key_from_date(target)
+    months = list(st.session_state.get("unlocked_months", []))
+    if key not in months:
+        months.append(key)
+    st.session_state["unlocked_months"] = months
+
+
+def lock_month_in_session(target: date) -> None:
+    key = month_key_from_date(target)
+    months = list(st.session_state.get("unlocked_months", []))
+    if key in months:
+        months.remove(key)
+    st.session_state["unlocked_months"] = months
+
+
+def can_edit_day(target: date) -> bool:
+  
+    if not is_past_month(target):
+        return True
+    return is_month_unlocked(target)
 
 
 def get_db_path() -> str:
@@ -73,7 +142,7 @@ def init_db() -> None:
 
 
 def ensure_db_schema() -> None:
-    # Garante coluna 'categoria' para agrupar receitas
+   
     with connect_db() as conn:
         cols = [row[1] for row in conn.execute("PRAGMA table_info('movimentos')").fetchall()]
         if "categoria" not in cols:
@@ -84,6 +153,7 @@ def fetch_movimentos(
     start: Optional[date] = None,
     end: Optional[date] = None,
     tipo: Optional[str] = None,
+    categoria: Optional[str] = None,
 ) -> pd.DataFrame:
     query = "SELECT data, tipo, descricao, categoria, valor1, valor2, valor_total, source FROM movimentos WHERE 1=1"
     params = []
@@ -96,6 +166,9 @@ def fetch_movimentos(
     if tipo is not None:
         query += " AND tipo = ?"
         params.append(tipo)
+    if categoria is not None:
+        query += " AND categoria = ?"
+        params.append(categoria)
     query += " ORDER BY data ASC, tipo ASC, rowid ASC"
     with connect_db() as conn:
         df = pd.read_sql_query(query, conn, params=params, parse_dates=["data"])  
@@ -128,7 +201,7 @@ def replace_movimentos_for_day(day: date, tipo: str, df_rows: pd.DataFrame, sour
 
 
 def replace_receita_for_day(day: date, df_rows: pd.DataFrame, source: str) -> None:
-    # df_rows esperado: categoria, descricao, prevista, realizada
+    
     expected_cols = ["categoria", "descricao", "prevista", "realizada"]
     for col in expected_cols:
         if col not in df_rows.columns:
@@ -138,10 +211,10 @@ def replace_receita_for_day(day: date, df_rows: pd.DataFrame, source: str) -> No
         if not df_rows.empty:
             to_insert = df_rows.copy()
             to_insert = to_insert[["categoria", "descricao", "prevista", "realizada"]]
-            # normaliza números
+
             to_insert["prevista"] = to_insert["prevista"].apply(_parse_number_value)
             to_insert["realizada"] = to_insert["realizada"].apply(_parse_number_value)
-            # monta ordem p/ insert
+
             values = []
             for _, r in to_insert.iterrows():
                 values.append(
@@ -162,7 +235,7 @@ def replace_receita_for_day(day: date, df_rows: pd.DataFrame, source: str) -> No
 
 
 def replace_despesa_for_day(day: date, df_rows: pd.DataFrame, source: str) -> None:
-    # df_rows esperado: categoria, descricao, prevista, realizada
+    
     expected_cols = ["categoria", "descricao", "prevista", "realizada"]
     for col in expected_cols:
         if col not in df_rows.columns:
@@ -172,7 +245,7 @@ def replace_despesa_for_day(day: date, df_rows: pd.DataFrame, source: str) -> No
         if not df_rows.empty:
             to_insert = df_rows.copy()
             to_insert = to_insert[["categoria", "descricao", "prevista", "realizada"]]
-            # normaliza números
+
             to_insert["prevista"] = to_insert["prevista"].apply(_parse_number_value)
             to_insert["realizada"] = to_insert["realizada"].apply(_parse_number_value)
             values = []
@@ -228,7 +301,7 @@ def parse_txt_to_df(file_bytes: bytes) -> pd.DataFrame:
     try:
         df = pd.read_csv(io.StringIO(text), sep=delimiter if delimiter else None, engine="python")
     except Exception:
-        # Fallback: try whitespace
+        
         df = pd.read_csv(io.StringIO(text), sep="\s+", engine="python")
 
     df = normalize_input_df(df)
@@ -237,7 +310,7 @@ def parse_txt_to_df(file_bytes: bytes) -> pd.DataFrame:
 
 def parse_pdf_to_df(file_bytes: bytes) -> pd.DataFrame:
     try:
-        import pdfplumber  # type: ignore
+        import pdfplumber  
     except Exception:
         st.warning("Leitura de PDF limitada (pdfplumber não instalado). Apenas armazenamento do anexo será feito.")
         return pd.DataFrame(columns=["data", "tipo", "descricao", "valor1", "valor2"])  # empty
@@ -269,29 +342,29 @@ def parse_pdf_to_df(file_bytes: bytes) -> pd.DataFrame:
                 if not tbl:
                     continue
                 df = pd.DataFrame(tbl).astype(str)
-                # Heurística: tenta identificar cabeçalho na primeira linha
+               
                 header = df.iloc[0].astype(str).str.lower().tolist()
                 if any("desc" in h for h in header) or any("valor" in h for h in header) or any("data" in h for h in header):
                     df.columns = _dedupe_labels(header)
                     df = df.iloc[1:].reset_index(drop=True)
                 else:
-                    # renomeia colunas para c0..cn e mantém todas as linhas
+        
                     df.columns = [f"c{i}" for i in range(df.shape[1])]
                 tables.append(df)
                 max_cols = max(max_cols, df.shape[1])
 
     if not tables:
-        return pd.DataFrame(columns=["data", "tipo", "descricao", "valor1", "valor2"])  # empty
+        return pd.DataFrame(columns=["data", "tipo", "descricao", "valor1", "valor2"]) 
 
-    # Normaliza para mesmo número de colunas e nomes únicos antes de concatenar
+    
     norm_tables: list[pd.DataFrame] = []
     for df in tables:
         df2 = df.copy()
-        # padroniza nomes
+       
         if set(df2.columns) - set([f"c{i}" for i in range(df2.shape[1])]):
-            # se não está no formato c*, converte
+            
             df2.columns = [f"c{i}" for i in range(df2.shape[1])]
-        # ajusta largura
+        
         target_cols = [f"c{i}" for i in range(max_cols)]
         df2 = df2.reindex(columns=target_cols, fill_value=None)
         norm_tables.append(df2)
@@ -299,7 +372,7 @@ def parse_pdf_to_df(file_bytes: bytes) -> pd.DataFrame:
     try:
         big = pd.concat(norm_tables, ignore_index=True)
     except Exception:
-        # fallback: usa somente primeiras colunas comuns
+        
         common_cols = sorted(set.intersection(*(set(t.columns) for t in norm_tables))) if norm_tables else []
         big = pd.concat([t[common_cols] for t in norm_tables], ignore_index=True)
 
@@ -310,7 +383,7 @@ def parse_pdf_to_df(file_bytes: bytes) -> pd.DataFrame:
 
 def normalize_input_df(df: pd.DataFrame) -> pd.DataFrame:
     cols = {c.lower().strip(): c for c in df.columns}
-    # mapeamentos comuns
+   
     col_map = {
         "data": None,
         "tipo": None,
@@ -333,28 +406,28 @@ def normalize_input_df(df: pd.DataFrame) -> pd.DataFrame:
             col_map["valor1"] = cols[key]
 
     out = pd.DataFrame()
-    # data
+    
     if col_map["data"] and col_map["data"] in df.columns:
         out["data"] = pd.to_datetime(df[col_map["data"]], errors="coerce").dt.date
     else:
         out["data"] = pd.NaT
-    # tipo
+
     if col_map["tipo"] and col_map["tipo"] in df.columns:
         out["tipo"] = df[col_map["tipo"]].astype(str).str.lower().str.strip()
     else:
         out["tipo"] = None
-    # descricao
+  
     out["descricao"] = df[col_map["descricao"]] if col_map["descricao"] and col_map["descricao"] in df.columns else None
-    # valores
+
     def to_float(s):
         return _parse_number_value(s)
 
     out["valor1"] = df[col_map["valor1"]].apply(to_float) if col_map["valor1"] and col_map["valor1"] in df.columns else 0.0
     out["valor2"] = df[col_map["valor2"]].apply(to_float) if col_map["valor2"] and col_map["valor2"] in df.columns else 0.0
 
-    # saneia campos
+    
     out["descricao"] = out["descricao"].astype(str).fillna("").str.strip()
-    # limita tipo aos aceitos
+    
     out["tipo"] = out["tipo"].where(out["tipo"].isin(["receita", "despesa"]), None)
 
     return out[["data", "tipo", "descricao", "valor1", "valor2"]]
@@ -370,16 +443,15 @@ def _parse_number_value(value) -> float:
         if s.strip() == "":
             return 0.0
         s = s.replace(" ", "").replace("R$", "").strip()
-        # Heurísticas comuns pt-BR
-        # 1) se tem vírgula, tratar vírgula como decimal
+        
         if "," in s and "." in s:
-            # remove separadores de milhar (pontos) e troca vírgula por ponto
+           
             s = s.replace(".", "").replace(",", ".")
         elif "," in s and "." not in s:
-            # só vírgula -> decimal
+          
             s = s.replace(".", "").replace(",", ".")
         else:
-            # só ponto, assume formato en-US
+           
             pass
         return float(s)
     except Exception:
@@ -409,7 +481,7 @@ def ensure_session_state(day: date) -> None:
                     "realizada": df_rec["valor2"].apply(lambda x: "" if pd.isna(x) else str(x)),
                 }
             )
-            # mescla com template (mantém dtype object para melhor estabilidade do editor)
+           
             st.session_state["receita_df"] = merge_with_template(rec_ui, get_receita_template_df())
         else:
             st.session_state["receita_df"] = get_receita_template_df()
@@ -482,11 +554,11 @@ def merge_with_template(current_df: pd.DataFrame, template_df: pd.DataFrame) -> 
         else:
             rows.append(trow)
     merged = pd.DataFrame(rows)
-    # adiciona quaisquer linhas extra que não estão no template
+   
     extra_keys = set(current_indexed.index) - set((str(r["categoria"]), str(r["descricao"])) for _, r in tmpl.iterrows())
     if extra_keys:
         merged = pd.concat([merged, current_indexed.loc[list(extra_keys)].reset_index(drop=True)], ignore_index=True)
-    # garante colunas na ordem correta
+   
     for col in ["categoria", "descricao", "prevista", "realizada"]:
         if col not in merged.columns:
             merged[col] = ""
@@ -504,10 +576,10 @@ def _hash_receita_df(df: pd.DataFrame) -> str:
     for c in cols:
         if c not in work.columns:
             work[c] = ""
-    # normaliza valores numéricos
+    
     work["prevista"] = work["prevista"].apply(_parse_number_value)
     work["realizada"] = work["realizada"].apply(_parse_number_value)
-    # string estável
+
     lines = [
         f"{str(r['categoria']).strip()}|{str(r['descricao']).strip()}|{float(r['prevista']):.2f}|{float(r['realizada']):.2f}"
         for _, r in work.iterrows()
@@ -516,7 +588,7 @@ def _hash_receita_df(df: pd.DataFrame) -> str:
 
 
 def _hash_despesa_df(df: pd.DataFrame) -> str:
-    # mesma estrutura
+   
     return _hash_receita_df(df)
 
 
@@ -524,7 +596,7 @@ def ensure_simple_index(df: pd.DataFrame) -> pd.DataFrame:
     try:
         if isinstance(df.index, pd.MultiIndex):
             return df.reset_index(drop=True)
-        # Mesmo quando não é MultiIndex, garantimos RangeIndex estável
+       
         return df.reset_index(drop=True)
     except Exception:
         return df.copy()
@@ -550,7 +622,8 @@ def inject_styles() -> None:
             --card-brd: #E2E8F0;
             --shadow: 0 10px 25px rgba(2,6,23,0.06), 0 2px 6px rgba(2,6,23,0.04);
         }
-        .block-container { padding-top: 0.5rem; padding-bottom: 2rem; }
+        /* Evita alterar padding global do Streamlit para não quebrar layout padrão */
+        /* .block-container { padding-top: 0.5rem; padding-bottom: 2rem; } */
         /* HERO */
         .app-hero {
             border-radius: 16px;
@@ -605,11 +678,52 @@ def render_html_block(html_content: str, height: int | None = None) -> None:
     components_html(html_content, height=height or 160)
 
 
-def render_hero() -> None:
-    html = f"""
-   
+def auto_dismiss_alert(message: str, alert_type: str = "success", duration: int = 3) -> None:
+    """Cria um alerta que desaparece automaticamente após alguns segundos"""
+    color_map = {
+        "success": "#16a34a",
+        "warning": "#f59e0b", 
+        "error": "#dc2626",
+        "info": "#3b82f6"
+    }
+    
+    color = color_map.get(alert_type, "#16a34a")
+    
+    html_content = f"""
+    <div id="auto-dismiss-{datetime.now().timestamp()}" style="
+        background-color: {color};
+        color: white;
+        padding: 6px 12px;
+        border-radius: 6px;
+        margin: 2px 0;
+        font-size: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        opacity: 1;
+        transition: opacity 0.3s ease-out;
+        line-height: 1.3;
+    ">
+        {message}
+    </div>
+    <script>
+        setTimeout(function() {{
+            var element = document.getElementById('auto-dismiss-{datetime.now().timestamp()}');
+            if (element) {{
+                element.style.opacity = '0';
+                setTimeout(function() {{
+                    if (element && element.parentNode) {{
+                        element.parentNode.removeChild(element);
+                    }}
+                }}, 300);
+            }}
+        }}, {duration * 1000});
+    </script>
     """
-    render_html_block(html, height=140)
+    
+    render_html_block(html_content, height=35)
+
+
+def render_hero() -> None:
+    st.title("Fluxo de caixa do FUNDEB")
 
 
 def render_kpis(total_receita: float, total_despesa: float, saldo_inicial: float, saldo_final: float) -> None:
@@ -663,14 +777,14 @@ RECEITA_BANK_PATTERNS: dict[tuple[str, str], list[str]] = {
     ("IMPOSTOS", "ORIGEM ITCMD"): [r"\bITCMD\b"],
     ("IMPOSTOS", "ORIGEM IPI-EXP"): [r"\bIPI[- ]?EXP\b"],
     ("IMPOSTOS", "ORIGEM ICMS"): [r"RECEBIMENTO DE ICMS", r"\bICMS\b"],
-    # Por ora, conforme pedido, mapear FPM a partir de "FPE/FPM"
+   
     ("IMPOSTOS", "ORIGEM FPM"): [r"FPE/FPM", r"\bFPM\b"],
 }
 
 
 def _extract_lines_from_pdf(file_bytes: bytes) -> list[str]:
     try:
-        import pdfplumber  # type: ignore
+        import pdfplumber 
     except Exception:
         return []
     lines: list[str] = []
@@ -704,10 +818,10 @@ def autofill_receita_from_bank_pdf(day: date, receita_df: pd.DataFrame, file_byt
             continue
         if dm.group(1) != target_date_str:
             continue
-        # considera apenas créditos (C) quando explícito
+        
         if line.rstrip().endswith(" D"):
             continue
-        # tenta capturar último valor monetário
+        
         mvals = money_re.findall(line)
         if not mvals:
             continue
@@ -747,7 +861,7 @@ def autofill_receita_from_bank_pdf(day: date, receita_df: pd.DataFrame, file_byt
             new_row = {"categoria": categoria, "descricao": descricao, "prevista": "", "realizada": val_str}
             updated = pd.concat([updated, pd.DataFrame([new_row])], ignore_index=True)
 
-    # garante template
+
     updated = merge_with_template(updated, get_receita_template_df())
     return updated
 
@@ -792,7 +906,7 @@ def export_excel(receita_form: pd.DataFrame, despesa_form: pd.DataFrame, resumo_
     buffer = io.BytesIO()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"relatorio_fluxo_{ts}.xlsx"
-    # garante índices simples e colunas esperadas
+   
     rf = ensure_simple_index(receita_form).copy()
     df = ensure_simple_index(despesa_form).copy()
     rd = ensure_simple_index(resumo_diario).copy()
@@ -830,7 +944,7 @@ def export_pdf_day(
     saldo_dia: float,
 ) -> Tuple[bytes, str]:
     try:
-        from fpdf import FPDF  # type: ignore
+        from fpdf import FPDF  
     except Exception:
         st.warning("Biblioteca fpdf2 não instalada. Instale-a em requirements para exportar PDF.")
         return b"", ""
@@ -859,7 +973,7 @@ def export_pdf_day(
             pdf.cell(sum(col_widths), 7, "Sem dados", border=1, align="C", ln=1)
             return
 
-        # garantir colunas
+  
         use_df = df.copy()
         for col in ["categoria", "descricao", "prevista", "realizada"]:
             if col not in use_df.columns:
@@ -881,7 +995,7 @@ def export_pdf_day(
         pdf.ln(2)
 
     draw_table("Receita", receita_df)
-    # totais de receita
+   
     pdf.set_font("Helvetica", "B", 10)
     pdf.cell(0, 6, f"Total Receita do Dia: {format_currency(total_receita)}", ln=1)
     pdf.ln(2)
@@ -894,7 +1008,7 @@ def export_pdf_day(
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 8, f"Saldo de Dia: {format_currency(saldo_dia)}", ln=1)
 
-    # Finaliza
+
     result = pdf.output(dest="S")
     if isinstance(result, (bytes, bytearray)):
         content = bytes(result)
@@ -916,74 +1030,157 @@ def main() -> None:
     init_db()
 
     base_day = date.today()
-    with st.expander("Filtros e importação", expanded=False):
-        periodo = st.selectbox("Período", ["Hoje", "Esta semana", "Este mês", "Personalizado"], index=0, help="Escolha o intervalo para consulta e exportação.")
-        if periodo == "Personalizado":
-            c1, c2 = st.columns(2)
-            with c1:
-                start = st.date_input("Início", value=base_day.replace(day=1))
-            with c2:
-                end = st.date_input("Fim", value=base_day)
-        else:
-            start, end = detect_period(periodo, base_day)
-
-        day = st.date_input("Dia", value=base_day, help="Selecione o dia para lançar e salvar movimentos.")
+    
+    # ===========================================
+    # SEÇÃO 1: PREENCHIMENTO DE DADOS
+    # ===========================================
+    st.markdown("## Preenchimento de Dados")
+    st.markdown("Esta seção é destinada ao lançamento e preenchimento de movimentos financeiros.")
+    
+    with st.expander("Importação de Arquivos", expanded=False):
+        day = st.date_input("Dia para preenchimento", value=base_day, help="Selecione o dia para lançar e salvar movimentos.")
         uploaded_files = st.file_uploader(
             "Importar arquivos (.txt ou .pdf)", type=["txt", "pdf"], accept_multiple_files=True, help="Arquivos opcionais para pré-preencher."
         )
+        
+    
+    # Controle de edição de mês
+    st.markdown("**Controle de edição de mês**")
+    is_past = is_past_month(day, base_day)
+    if is_past and not is_month_unlocked(day):
+        _has_popover = hasattr(st, "popover")
+        ctx = st.popover("Desbloquear mês anterior") if _has_popover else st.expander("Desbloquear mês anterior")
+        with ctx:
+            st.caption("Informe a senha para liberar edição deste mês.")
+            pwd = st.text_input("Senha", type="password", key=f"pwd_{month_key_from_date(day)}")
+            if st.button("Desbloquear mês", use_container_width=True, key=f"btn_unlock_{month_key_from_date(day)}"):
+                expected = get_lock_password()
+                if expected and pwd == expected:
+                    unlock_month_in_session(day)
+                    st.success("Mês desbloqueado para edição nesta sessão.")
+                else:
+                    st.error("Senha inválida ou não configurada.")
+    elif is_past and is_month_unlocked(day):
+        col_a, col_b = st.columns([1,1])
+        with col_a:
+            st.success("Mês anterior desbloqueado para edição nesta sessão.")
+        with col_b:
+            if st.button("Bloquear novamente", use_container_width=True, key=f"btn_relock_{month_key_from_date(day)}"):
+                lock_month_in_session(day)
+                st.info("Mês bloqueado novamente.")
     ensure_session_state(day)
     st.session_state.setdefault("_last_day_key", day)
     
-    if periodo != "Personalizado":
-        start, end = detect_period(periodo, day)
+    # Processamento de arquivos importados
     if uploaded_files:
-        for uf in uploaded_files:
-            data_bytes = uf.read()
-            saved_path = os.path.join(get_uploads_dir(), f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uf.name}")
-            with open(saved_path, "wb") as f:
-                f.write(data_bytes)
+        # Verificar se estes arquivos já foram processados
+        current_files_hash = hashlib.md5(str([f.name + str(f.size) for f in uploaded_files]).encode()).hexdigest()
+        last_processed_hash = st.session_state.get("last_processed_files_hash", "")
+        
+        if current_files_hash != last_processed_hash:
+            dias_processados = set()
+            for uf in uploaded_files:
+                data_bytes = uf.read()
+                saved_path = os.path.join(get_uploads_dir(), f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uf.name}")
+                with open(saved_path, "wb") as f:
+                    f.write(data_bytes)
 
-            if uf.type == "text/plain" or (uf.name.lower().endswith(".txt")):
-                df_imp = parse_txt_to_df(data_bytes)
-            elif uf.name.lower().endswith(".pdf"):
-                # Primeiro, tentativa de auto-preenchimento específico para Receita a partir do extrato de banco
-                try:
-                    new_receita = autofill_receita_from_bank_pdf(day, st.session_state["receita_df"], data_bytes)
-                    st.session_state["receita_df"] = new_receita
-                    # Persiste imediatamente para não ser sobrescrito por fluxos genéricos
-                    replace_receita_for_day(day, new_receita, source="pdf-auto")
-                    st.success("Receita preenchida automaticamente a partir do PDF do extrato.")
-                except Exception:
-                    st.warning("Falha ao mapear Receita a partir do PDF. Tentando leitura tabular.")
-                # Evita sobrescrever com parse genérico; só use se precisar tratar outras tabelas
-                df_imp = pd.DataFrame()
+                if uf.type == "text/plain" or (uf.name.lower().endswith(".txt")):
+                    df_imp = parse_txt_to_df(data_bytes)
+                elif uf.name.lower().endswith(".pdf"):
+                    # Para PDFs, tentar extrair dados tabulares primeiro
+                    df_imp = parse_pdf_to_df(data_bytes)
+                    
+                    # Se não conseguiu extrair dados tabulares, tentar mapeamento automático de receita
+                    if df_imp.empty:
+                        try:
+                            # Extrair todas as datas do PDF
+                            lines = _extract_lines_from_pdf(data_bytes)
+                            dates_found = set()
+                            date_re = re.compile(r"^(\d{2}/\d{2}/\d{4})\b")
+                            
+                            for line in lines:
+                                dm = date_re.match(line)
+                                if dm:
+                                    try:
+                                        date_obj = datetime.strptime(dm.group(1), "%d/%m/%Y").date()
+                                        dates_found.add(date_obj)
+                                    except:
+                                        continue
+                            
+                            # Processar cada data encontrada no PDF
+                            if dates_found:
+                                for pdf_day in sorted(dates_found):
+                                    dias_processados.add(pdf_day)
+                                    if can_edit_day(pdf_day):
+                                        new_receita = autofill_receita_from_bank_pdf(pdf_day, get_receita_template_df(), data_bytes)
+                                        replace_receita_for_day(pdf_day, new_receita, source=f"pdf-auto:{uf.name}")
+                                        # Usar auto-dismiss alert
+                                        auto_dismiss_alert(f"Receita preenchida automaticamente para {pdf_day.strftime('%d/%m/%Y')} a partir do PDF.", "success", 3)
+                                    else:
+                                        st.warning(f"Receita lida do PDF para {pdf_day.strftime('%d/%m/%Y')}, mas não salva (mês bloqueado).")
+                            else:
+                                st.warning("Nenhuma data válida encontrada no PDF.")
+                        except Exception as e:
+                            st.warning(f"Falha ao mapear Receita a partir do PDF: {str(e)}")
+                else:
+                    df_imp = pd.DataFrame()
+
+                if not df_imp.empty:
+                    for tipo_val in ("receita", "despesa"):
+                        subset = df_imp[df_imp["tipo"] == tipo_val] if "tipo" in df_imp.columns else pd.DataFrame()
+                        if not subset.empty:
+                            days_in_subset = subset["data"].dropna().unique().tolist() if "data" in subset.columns else []
+                            if days_in_subset:
+                                for d in days_in_subset:
+                                    dias_processados.add(d)
+                                    day_rows = subset[subset["data"] == d][["descricao", "valor1", "valor2"]]
+                                   
+                                    if can_edit_day(d):
+                                        replace_movimentos_for_day(d, tipo_val, day_rows, source=f"upload:{uf.name}")
+                                        # Usar auto-dismiss alert
+                                        auto_dismiss_alert(f"{tipo_val.title()} importada para {d.strftime('%d/%m/%Y')} a partir de {uf.name}", "success", 3)
+                                    else:
+                                        st.warning(f"Importação ignorada para {d.strftime('%d/%m/%Y')} (mês bloqueado).")
+                            else:
+                                # Se não há datas no arquivo, usar o dia selecionado
+                                dias_processados.add(day)
+                                day_rows = subset[["descricao", "valor1", "valor2"]]
+                                if can_edit_day(day):
+                                    replace_movimentos_for_day(day, tipo_val, day_rows, source=f"upload:{uf.name}")
+                                    # Usar auto-dismiss alert
+                                    auto_dismiss_alert(f"{tipo_val.title()} importada para {day.strftime('%d/%m/%Y')} a partir de {uf.name}", "success", 3)
+                                else:
+                                    st.warning(f"Importação ignorada para {day.strftime('%d/%m/%Y')} (mês bloqueado).")
+
+            # Marcar estes arquivos como processados
+            st.session_state["last_processed_files_hash"] = current_files_hash
+            
+            st.session_state.pop("loaded_day", None)
+            ensure_session_state(day)
+            
+            # Mostrar resumo da importação
+            if dias_processados:
+                dias_ordenados = sorted(dias_processados)
+                if len(dias_ordenados) == 1:
+                    st.success(f"Importação concluída. Dados processados para {dias_ordenados[0].strftime('%d/%m/%Y')}.")
+                else:
+                    st.success(f"Importação concluída. Dados processados para {len(dias_ordenados)} dias: {dias_ordenados[0].strftime('%d/%m/%Y')} a {dias_ordenados[-1].strftime('%d/%m/%Y')}.")
             else:
-                df_imp = pd.DataFrame()
+                st.success("Importação concluída.")
+            
+            # Aviso para limpar formulário
+            st.info("💡 **Dica:** Remova o arquivo do formulário acima para limpar a tela de avisos.")
+        else:
+            st.info("Arquivos já foram processados anteriormente. Para reprocessar, carregue novos arquivos.")
 
-           
-            if not df_imp.empty:
+    # Formulário de preenchimento
+    st.markdown("### Formulário de Preenchimento")
+    st.markdown("Preencha os dados de receita e despesa para o dia selecionado.")
     
-                for tipo_val in ("receita", "despesa"):
-                    subset = df_imp[df_imp["tipo"] == tipo_val] if "tipo" in df_imp.columns else pd.DataFrame()
-                    if not subset.empty:
-                        
-                        days_in_subset = subset["data"].dropna().unique().tolist() if "data" in subset.columns else []
-                        if days_in_subset:
-                            for d in days_in_subset:
-                                day_rows = subset[subset["data"] == d][["descricao", "valor1", "valor2"]]
-                                replace_movimentos_for_day(d, tipo_val, day_rows, source=f"upload:{uf.name}")
-                        else:
-                            day_rows = subset[["descricao", "valor1", "valor2"]]
-                            replace_movimentos_for_day(day, tipo_val, day_rows, source=f"upload:{uf.name}")
-
-       
-        st.session_state.pop("loaded_day", None)
-        ensure_session_state(day)
-        st.success("Importação concluída.")
-
-    st.subheader("Lançamentos do dia")
     tab_rec, tab_desp = st.tabs(["Receita", "Despesa"])
 
+    can_edit = can_edit_day(day)
     with tab_rec:
         st.caption("Preencha Prevista e Realizada usando vírgula para centavos. Categorias padronizadas ajudam no relatório.")
         receita_df: pd.DataFrame = ensure_simple_index(st.session_state["receita_df"])  # evita MultiIndex no editor
@@ -1003,17 +1200,17 @@ def main() -> None:
                 "realizada": st.column_config.TextColumn("Realizada", help="Use vírgula como separador decimal. Ex: 1.234,56"),
             },
             key=f"editor_receita_{day.isoformat()}",
-            disabled=False,
+            disabled=not can_edit,
         )
       
-        # Converte de volta de string BRL para número antes de persistir/calcular
+       
         edited_receita = ensure_simple_index(edited_receita)
         for col in ["prevista", "realizada"]:
             if col in edited_receita.columns:
                 edited_receita[col] = edited_receita[col].apply(_parse_number_value)
         new_hash_rec = _hash_receita_df(edited_receita)
         old_hash_rec = st.session_state.get("_hash_rec")
-        if new_hash_rec != old_hash_rec:
+        if new_hash_rec != old_hash_rec and can_edit:
             replace_receita_for_day(day, edited_receita, source="auto")
             st.session_state["_hash_rec"] = new_hash_rec
         total_receita = compute_receita_total(edited_receita)
@@ -1045,7 +1242,7 @@ def main() -> None:
                 "realizada": st.column_config.TextColumn("Realizada", help="Use vírgula como separador decimal. Ex: 1.234,56"),
             },
             key=f"editor_despesa_{day.isoformat()}",
-            disabled=False,
+            disabled=not can_edit,
         )
        
         edited_despesa = ensure_simple_index(edited_despesa)
@@ -1054,13 +1251,13 @@ def main() -> None:
                 edited_despesa[col] = edited_despesa[col].apply(_parse_number_value)
         new_hash_desp = _hash_despesa_df(edited_despesa)
         old_hash_desp = st.session_state.get("_hash_desp")
-        if new_hash_desp != old_hash_desp:
+        if new_hash_desp != old_hash_desp and can_edit:
             replace_despesa_for_day(day, edited_despesa, source="auto")
             st.session_state["_hash_desp"] = new_hash_desp
         total_despesa = compute_despesa_total(edited_despesa)
         st.metric("Total Despesa do Dia (Realizada)", value=format_currency(total_despesa))
 
-    # Calcula saldo do dia anterior (realizado) como saldo inicial
+   
     dia_anterior = day - timedelta(days=1)
     movs_ate_anterior = fetch_movimentos(None, dia_anterior)
     saldo_inicial = 0.0
@@ -1072,119 +1269,147 @@ def main() -> None:
     saldo_final = saldo_inicial + (total_receita - total_despesa)
     render_kpis(total_receita, total_despesa, saldo_inicial, saldo_final)
 
-    # Auto-save já em uso acima; botões removidos
-
+    # ===========================================
+    # SEÇÃO 2: VISUALIZAÇÃO E CONSULTA
+    # ===========================================
     st.markdown("---")
-
+    st.markdown("## Visualização e Consulta")
+    st.markdown("Esta seção é destinada à consulta e visualização dos dados já preenchidos no sistema.")
     
-    filtrado = fetch_movimentos(start, end)
+    # Filtros de visualização independentes
+    st.markdown("### Filtros de Visualização")
+    periodo_vis = st.selectbox("Período para visualização", ["Hoje", "Esta semana", "Este mês", "Personalizado"], index=0, help="Escolha o intervalo para consulta e exportação.")
+    if periodo_vis == "Personalizado":
+        c1, c2 = st.columns(2)
+        with c1:
+            start_vis = st.date_input("Data início", value=base_day.replace(day=1))
+        with c2:
+            end_vis = st.date_input("Data fim", value=base_day)
+    else:
+        start_vis, end_vis = detect_period(periodo_vis, base_day)
+    
+    # Filtros adicionais para visualização
+    col1, col2 = st.columns(2)
+    with col1:
+        tipo_filtro = st.selectbox("Tipo de movimento", ["Todos", "Receita", "Despesa"], index=0)
+    with col2:
+        categoria_filtro = st.selectbox("Categoria", ["Todas", "IMPOSTOS", "RENDIMENTOS", "OUTROS", "FOLHA DE PAGAMENTO", "VALE REFEIÇÃO", "VALE TRANSPORTE", "ONG", "CUSTEIO"], index=0)
+    
+    # Aplicar filtros
+    tipo_vis = None if tipo_filtro == "Todos" else tipo_filtro.lower()
+    categoria_vis = None if categoria_filtro == "Todas" else categoria_filtro
+    filtrado = fetch_movimentos(start_vis, end_vis, tipo_vis, categoria_vis)
+    
     if not filtrado.empty:
         filtrado["data"] = pd.to_datetime(filtrado["data"]).dt.date
-
         filtrado["realizado"] = filtrado["valor2"].apply(_parse_number_value)
 
-        resumo = (
-            filtrado.groupby(["data", "tipo"], as_index=False)[["realizado"]].sum()
-        )
+        # Tabela de visualização com todos os dados filtrados
+        st.markdown("### Tabela de Visualização")
+        st.markdown("Dados filtrados conforme os critérios selecionados acima.")
         
-        pivot = resumo.pivot(index="data", columns="tipo", values="realizado").fillna(0.0).reset_index()
-        pivot["saldo"] = pivot.get("receita", 0.0) - pivot.get("despesa", 0.0)
-        pivot["saldo_acumulado"] = pivot["saldo"].cumsum()
+        # Preparar dados para exibição
+        display_df = filtrado.copy()
+        # Garantir que a coluna data seja datetime antes de formatar
+        if not pd.api.types.is_datetime64_any_dtype(display_df["data"]):
+            display_df["data"] = pd.to_datetime(display_df["data"])
+        display_df["Data"] = display_df["data"].dt.strftime("%d/%m/%Y")
+        display_df["Tipo"] = display_df["tipo"].str.title()
+        display_df["Categoria"] = display_df["categoria"].fillna("")
+        display_df["Descrição"] = display_df["descricao"]
+        display_df["Prevista"] = display_df["valor1"].apply(lambda x: format_currency(x) if x > 0 else "")
+        display_df["Realizada"] = display_df["valor2"].apply(lambda x: format_currency(x) if x > 0 else "")
+        
+        # Selecionar colunas para exibição
+        cols_to_show = ["Data", "Tipo", "Categoria", "Descrição", "Prevista", "Realizada"]
+        display_df = display_df[cols_to_show]
+        
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-        st.subheader("Consulta do período")
-
-        st.markdown("**Resumo diário (Receita x Despesa x Saldo)**")
-        pivot_display = pivot.copy()
-        if "data" in pivot_display.columns:
-            try:
-                pivot_display["data"] = pd.to_datetime(pivot_display["data"]).dt.strftime("%d/%m/%Y")
-            except Exception:
-                pivot_display["data"] = pivot_display["data"].astype(str)
-        brl_cols = [c for c in ["receita", "despesa", "saldo", "saldo_acumulado"] if c in pivot_display.columns]
-        def _fmt_brl(x):
-            try:
-                return format_currency(float(x))
-            except Exception:
-                return ""
-        styler = pivot_display.style.format({col: _fmt_brl for col in brl_cols})
-        st.dataframe(styler, use_container_width=True, hide_index=True)
-
-   
-        st.markdown(" ")
-        st.subheader("Comparativo do dia (Receita x Despesa)")
-        filtrado_dia = filtrado[filtrado["data"] == day]
-        total_rec_dia = float(filtrado_dia.loc[filtrado_dia["tipo"] == "receita", "realizado"].sum()) if not filtrado_dia.empty else 0.0
-        total_desp_dia = float(filtrado_dia.loc[filtrado_dia["tipo"] == "despesa", "realizado"].sum()) if not filtrado_dia.empty else 0.0
-        if (total_rec_dia + total_desp_dia) > 0:
-            df_pie = pd.DataFrame({
-                "Tipo": ["Receita (realizada)", "Despesa (realizada)"],
-                "Valor": [total_rec_dia, total_desp_dia],
-            })
-            fig_pie = px.pie(
-                df_pie,
-                names="Tipo",
-                values="Valor",
-                hole=0.55,
-                color="Tipo",
-                color_discrete_map={
-                    "Receita (realizada)": "#2E8540",
-                    "Despesa (realizada)": "#C0392B",
-                },
-            )
-            fig_pie.update_traces(textposition="inside", textinfo="label+percent", hovertemplate="%{label}<br>Valor: R$ %{value:,.2f}<extra></extra>")
-            diff = abs(total_rec_dia - total_desp_dia)
-            maior = "Receita" if total_rec_dia >= total_desp_dia else "Despesa"
-            fig_pie.update_layout(
-                showlegend=False,
-                annotations=[
-                    dict(text=f"{maior} maior\nDif: {format_currency(diff)}", x=0.5, y=0.5, font_size=14, showarrow=False, align='center')
-                ],
-            )
-            st.plotly_chart(fig_pie, use_container_width=True)
+        # Seção de exportação
+        st.markdown("### Exportação de Relatórios")
+        st.markdown("Selecione o período específico para exportação dos relatórios.")
+        
+        # Filtros específicos para exportação
+        col_exp1, col_exp2 = st.columns(2)
+        with col_exp1:
+            periodo_export = st.selectbox("Período para exportação", ["Hoje", "Esta semana", "Este mês", "Personalizado"], index=0, key="export_period")
+        with col_exp2:
+            if periodo_export == "Personalizado":
+                st.date_input("Data início exportação", value=base_day.replace(day=1), key="export_start")
+                st.date_input("Data fim exportação", value=base_day, key="export_end")
+            else:
+                start_export, end_export = detect_period(periodo_export, base_day)
+        
+        # Aplicar filtros de exportação
+        if periodo_export == "Personalizado":
+            start_export = st.session_state.get("export_start", base_day.replace(day=1))
+            end_export = st.session_state.get("export_end", base_day)
         else:
-            st.info("Sem valores no dia selecionado.")
-
-        rec_db = fetch_movimentos(day, day, "receita")
-        desp_db = fetch_movimentos(day, day, "despesa")
-        rec_form = (
-            rec_db[["categoria", "descricao", "valor1", "valor2"]]
-            .rename(columns={"valor1": "prevista", "valor2": "realizada"})
-            if not rec_db.empty else pd.DataFrame(columns=["categoria", "descricao", "prevista", "realizada"])
-        )
-        desp_form = (
-            desp_db[["categoria", "descricao", "valor1", "valor2"]]
-            .rename(columns={"valor1": "prevista", "valor2": "realizada"})
-            if not desp_db.empty else pd.DataFrame(columns=["categoria", "descricao", "prevista", "realizada"])
-        )
-        total_rec_db = float(rec_form.get("realizada", pd.Series(dtype=float)).apply(_parse_number_value).sum()) if not rec_form.empty else 0.0
-        total_desp_db = float(desp_form.get("realizada", pd.Series(dtype=float)).apply(_parse_number_value).sum()) if not desp_form.empty else 0.0
-        saldo_db = total_rec_db - total_desp_db
-        excel_bytes, excel_name = export_excel(rec_form, desp_form, pivot)
-        pdf_bytes, pdf_name = export_pdf_day(
-            day,
-            rec_form,
-            desp_form,
-            total_rec_db,
-            total_desp_db,
-            saldo_db,
-        )
-        ex1, ex2 = st.columns(2)
-        with ex1:
-            st.download_button(
-                "Baixar relatório .xlsx do período",
-                data=excel_bytes,
-                file_name=excel_name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-        with ex2:
-            st.download_button(
-                "Baixar PDF do dia",
-                data=pdf_bytes,
-                file_name=pdf_name if pdf_name else "fluxo_dia.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
+            start_export, end_export = detect_period(periodo_export, base_day)
+        
+        # Buscar dados para exportação
+        dados_export = fetch_movimentos(start_export, end_export)
+        
+        if not dados_export.empty:
+            dados_export["data"] = pd.to_datetime(dados_export["data"]).dt.date
+            dados_export["realizado"] = dados_export["valor2"].apply(_parse_number_value)
+            
+            # Preparar dados para exportação
+            rec_periodo = dados_export[dados_export["tipo"] == "receita"][["categoria", "descricao", "valor1", "valor2"]].rename(columns={"valor1": "prevista", "valor2": "realizada"})
+            desp_periodo = dados_export[dados_export["tipo"] == "despesa"][["categoria", "descricao", "valor1", "valor2"]].rename(columns={"valor1": "prevista", "valor2": "realizada"})
+            
+            # Criar resumo simples para exportação
+            resumo_export = dados_export.groupby(["data", "tipo"], as_index=False)[["realizado"]].sum()
+            pivot_export = resumo_export.pivot(index="data", columns="tipo", values="realizado").fillna(0.0).reset_index()
+            pivot_export["saldo"] = pivot_export.get("receita", 0.0) - pivot_export.get("despesa", 0.0)
+            pivot_export["saldo_acumulado"] = pivot_export["saldo"].cumsum()
+            
+            excel_bytes, excel_name = export_excel(rec_periodo, desp_periodo, pivot_export)
+        
+            # Mostrar informações do período selecionado
+            st.info(f"Período selecionado para exportação: {start_export.strftime('%d/%m/%Y')} a {end_export.strftime('%d/%m/%Y')}")
+            
+            ex1, ex2 = st.columns(2)
+            with ex1:
+                st.download_button(
+                    f"Baixar relatório .xlsx ({start_export.strftime('%d/%m/%Y')} a {end_export.strftime('%d/%m/%Y')})",
+                    data=excel_bytes,
+                    file_name=excel_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                )
+            with ex2:
+                # Exportação PDF para o primeiro dia do período (se disponível)
+                if not dados_export.empty:
+                    dia_export = dados_export["data"].min()
+                    rec_dia = dados_export[(dados_export["data"] == dia_export) & (dados_export["tipo"] == "receita")][["categoria", "descricao", "valor1", "valor2"]].rename(columns={"valor1": "prevista", "valor2": "realizada"})
+                    desp_dia = dados_export[(dados_export["data"] == dia_export) & (dados_export["tipo"] == "despesa")][["categoria", "descricao", "valor1", "valor2"]].rename(columns={"valor1": "prevista", "valor2": "realizada"})
+                    
+                    total_rec_dia = float(rec_dia.get("realizada", pd.Series(dtype=float)).apply(_parse_number_value).sum()) if not rec_dia.empty else 0.0
+                    total_desp_dia = float(desp_dia.get("realizada", pd.Series(dtype=float)).apply(_parse_number_value).sum()) if not desp_dia.empty else 0.0
+                    saldo_dia = total_rec_dia - total_desp_dia
+                    
+                    pdf_bytes, pdf_name = export_pdf_day(
+                        dia_export,
+                        rec_dia,
+                        desp_dia,
+                        total_rec_dia,
+                        total_desp_dia,
+                        saldo_dia,
+                    )
+                    
+                    st.download_button(
+                        f"Baixar PDF do dia {dia_export.strftime('%d/%m/%Y')}",
+                        data=pdf_bytes,
+                        file_name=pdf_name if pdf_name else "fluxo_dia.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+                else:
+                    st.info("Nenhum dado disponível para exportação PDF")
+        else:
+            st.warning(f"Nenhum dado encontrado no período selecionado ({start_export.strftime('%d/%m/%Y')} a {end_export.strftime('%d/%m/%Y')})")
     else:
         st.info("Sem dados no período selecionado.")
 

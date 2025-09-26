@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+import re
 
 def format_value(value):
     number = float(value)
@@ -10,6 +11,66 @@ def format_value(value):
 
 def is_significant_difference(value1, value2):
     return abs(value1 - value2) >= 0.001
+
+def parse_brl(value):
+
+    if pd.isna(value):
+        return float('nan')
+    s = str(value).strip()
+    if s == '':
+        return float('nan')
+
+    s = s.replace('R$', '').replace(' ', '')
+    
+    negative = False
+    if s.startswith('(') and s.endswith(')'):
+        negative = True
+        s = s[1:-1]
+    if '-' in s:
+        negative = True
+        s = s.replace('-', '')
+
+    s = re.sub(r'[^\d\.,]', '', s)
+    if s == '':
+        return float('nan')
+
+    if ',' in s and '.' in s:
+       
+        if s.rfind(',') > s.rfind('.'):
+            decimal_sep = ','
+            thousands_sep = '.'
+        else:
+            decimal_sep = '.'
+            thousands_sep = ','
+        s_numeric = s.replace(thousands_sep, '').replace(decimal_sep, '.')
+    elif ',' in s:
+   
+        if re.search(r',\d{1,2}$', s):
+            s_numeric = s.replace('.', '').replace(',', '.')
+        else:
+           
+            s_numeric = s.replace(',', '')
+    elif '.' in s:
+
+        last_dot = s.rfind('.')
+        digits_after = len(s) - last_dot - 1
+        if 1 <= digits_after <= 2:
+           
+            left = s[:last_dot].replace('.', '')
+            right = s[last_dot+1:]
+            s_numeric = left + '.' + right
+        else:
+
+            s_numeric = s.replace('.', '')
+    else:
+       
+        s_numeric = s
+
+    try:
+        number = float(s_numeric)
+    except Exception:
+        return float('nan')
+    return -number if negative else number
 
 def read_file(uploaded_file):
 
@@ -35,10 +96,10 @@ def main():
         ctb = ctb[ctb['registro'] == '20']
 
    
-        posicao_bancos['saldo_inicial'] = posicao_bancos['saldo_inicial'].str.replace('.', '').str.replace(',', '.').astype(float)
-        posicao_bancos['saldo_final'] = posicao_bancos['saldo_final'].str.replace('.', '').str.replace(',', '.').astype(float)
-        ctb['saldo_inicial'] = ctb['saldo_inicial'].str.replace('.', '').str.replace(',', '.').astype(float)
-        ctb['saldo_final'] = ctb['saldo_final'].str.replace('.', '').str.replace(',', '.').astype(float)
+        posicao_bancos['saldo_inicial'] = posicao_bancos['saldo_inicial'].apply(parse_brl)
+        posicao_bancos['saldo_final'] = posicao_bancos['saldo_final'].apply(parse_brl)
+        ctb['saldo_inicial'] = ctb['saldo_inicial'].apply(parse_brl)
+        ctb['saldo_final'] = ctb['saldo_final'].apply(parse_brl)
 
  
         ctb_grouped = ctb.groupby('cod_reduz_banco').agg({

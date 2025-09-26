@@ -134,7 +134,10 @@ def to_pdf(df: pd.DataFrame) -> bytes:
     pdf.cell(0, 10, "REFERÊNCIA:", ln=True)
     pdf.cell(0, 5, "5RESGATES CONTRA O GOVERNO", ln=True)
 
-    return pdf.output(dest="S").encode("latin-1")
+    result = pdf.output(dest="S")
+    if isinstance(result, (bytearray, bytes)):
+        return bytes(result)
+    return result.encode("latin-1")
 
 def main():
     st.title("Depósitos Judiciais")

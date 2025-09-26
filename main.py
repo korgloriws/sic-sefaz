@@ -43,6 +43,8 @@ from nota_servico_sepat.extrator_nfse import main as main41
 from disponibilidade_caixa.main import main as main42 #VV
 from comprovante_de_remessa.main import main as main43 
 from fluxo_de_caixa_fundeb.main import main as main44 
+from comparador_recursos_disponiveis.app import main as main45
+from conferencia_balancete.app import main as main46
 
 
 
@@ -52,8 +54,8 @@ categorias_programas = {
     'Módulo da Contabilidade': {
         'Geradores De relatórios': ['Precatório', #'Formulário de credor / IR RFB',
         'Comparação dos saldos de encerramento','Comparador de PCASPs'],
-        'Conciliações Mensais': ['Balancete da Câmara VS o Balancete do SICOF', 'DED Câmara VS DED SICOF', 'REC VS QGR', 'Restos a pagar Câmara VS SICOF',
-        'Comparador crédito e débito', 'DDR'],
+        'Conciliações Mensais': ['Balancete da Câmara VS o Balancete do SICOF', 'DED Câmara VS DED SICOF',  'Restos a pagar Câmara VS SICOF',
+        'Comparador crédito e débito', 'DDR','Comparador de recursos disponíveis','Conferência de Balancete para saldos invertidos'],
     },
     'Módulo de prestação de contas': {
         
@@ -67,7 +69,7 @@ categorias_programas = {
     },
 
     'Módulo Superintendencia de Finanças':{
-       'Conciliações Diárias': ['Fluxo de Caixa Fundeb'],
+       'Conciliações Diárias': ['Fluxo de Caixa FUNDEB'],
        'Conciliações Mensais': ['REC VS QGR', 'Rec VS ementário da receita', 'Fontes co','Posição de Bancos VS CTB','Depósitos judicias','Comprovantes de remessa'],
        'Módulo AM': [ 'LQD' ],
        'Inspeção Financeira':["Relacão de trabalhadores do FGTS","NF-SEPAT - Produtos","NF-SEPAT - Serviços"],
@@ -117,7 +119,9 @@ programas_funcoes = {
     'NF-SEPAT - Serviços': main41,
     'Disponibilidade de Caixa': main42,
     'Comprovantes de remessa': main43,
-    'Fluxo de Caixa Fundeb': main44,
+    'Fluxo de Caixa FUNDEB': main44,
+    'Comparador de recursos disponíveis': main45,
+    'Conferência de Balancete para saldos invertidos': main46,
  
 }
 
@@ -131,6 +135,12 @@ def get_all_programas():
 
 
 st.sidebar.markdown("# SIC SEFAZ")
+
+
+st.sidebar.link_button(
+    "Documentação SIC SEFAZ",
+    "https://prefeituracontagem.sharepoint.com/sites/sefaz-supcenc/Documentos%20Compartilhados/Forms/AllItems.aspx?viewid=3712bc83%2Dbe22%2D4f1a%2D8418%2D959de272683f&id=%2Fsites%2Fsefaz%2Dsupcenc%2FDocumentos%20Compartilhados%2FMateus%20Augusto%2FManual%20SIC%20SEFAZ%2FPDF%2F0%2E%20Manual%20do%20SIC%20SEFAZ%2Epdf&parent=%2Fsites%2Fsefaz%2Dsupcenc%2FDocumentos%20Compartilhados%2FMateus%20Augusto%2FManual%20SIC%20SEFAZ%2FPDF",
+)
 
 
 
