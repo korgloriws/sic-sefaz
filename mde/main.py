@@ -55,7 +55,8 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
     soma_valores_G62 = 0
     soma_valores_G63 = 0
     soma_valores_G64 = 0
-    soma_valores_G66 = 0
+    soma_valores_G65 = 0
+    soma_valores_G67 = 0
     soma_valores_G70 = 0
     soma_valores_especificos = 0
     
@@ -138,6 +139,7 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
                 '9211125004','9211125301','9211130341','9211145111','9211145112','9311125001',
                 '9311125002','9311125003','9311125004','9311125301','9311125302','9311145111',
                 '9311145112','9311145113','9311145114','9111145111','9111145131','9111145121',
+                '9211130311'
                 
             ]:
                 soma_valores_especificos += row.VR_ARREC_ATE_MES_FONTE
@@ -146,7 +148,7 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
                 '9500000000','9517115111','9517115201','9517215001','9517215101','9517215201' ,]:
                 soma_valores_G56 += row.VR_ARREC_ATE_MES_FONTE
 
-            elif row.CODIGO_RECEITA in ['1751000000','1751500000','1751500100','1751500100']:
+            elif row.CODIGO_RECEITA in ['1751000000','1751500000','1751500100','1751500100','9817515001']:
                 soma_valores_G57 += row.VR_ARREC_ATE_MES_FONTE
 
             if row.CODIGO_RECEITA == '1321010100':
@@ -177,6 +179,10 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
                 if row.FONTE_RECURSO in ['21540770', '21540000', '31500701' ,'51500701']:
                     soma_valores_G64 += row.VR_ARREC_ATE_MES_FONTE
 
+            if row.CODIGO_RECEITA == '1715530100':
+                if row.FONTE_RECURSO in ['21546000']:
+                    soma_valores_G65 += row.VR_ARREC_ATE_MES_FONTE
+
         sheet['G56'].value = soma_valores_G56
         sheet['G57'].value = soma_valores_G57
         sheet['G58'].value = soma_valores_G58
@@ -186,6 +192,7 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
         sheet['G62'].value = soma_valores_G62
         sheet['G63'].value = soma_valores_G63
         sheet['G64'].value = soma_valores_G64
+        sheet['G65'].value = soma_valores_G65
         sheet['G43'].value = soma_valores_especificos
 
     if ded_data is not None:
@@ -203,33 +210,33 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
             if row.fonte == '52500701':
                 sheet['G54'].value = row.liq_ate_mes
             elif row.fonte in ['21540770', '21540000']:
-                soma_valores_G66 += row.liq_ate_mes
+                soma_valores_G67 += row.liq_ate_mes
             elif row.fonte in ['22540770', '22540000']:
                 soma_valores_G70 += row.pag_ate_mes
 
         sheet['G70'].value = soma_valores_G70
-        sheet['G66'].value = soma_valores_G66
+        sheet['G67'].value = soma_valores_G67
 
         if rpnp_data is not None:
             for row in rpnp_data.itertuples():
                 if row.fonte == '1500701':
-                    sheet['G73'].value = row.valor_anu_ant
-                    sheet['G81'].value = row.valor_anu_mes
-                if row.fonte == '31500701':
                     sheet['G74'].value = row.valor_anu_ant
                     sheet['G82'].value = row.valor_anu_mes
-                if row.fonte == '51500701':
+                if row.fonte == '31500701':
                     sheet['G75'].value = row.valor_anu_ant
                     sheet['G83'].value = row.valor_anu_mes
-                if row.fonte == '2500701':
+                if row.fonte == '51500701':
                     sheet['G76'].value = row.valor_anu_ant
                     sheet['G84'].value = row.valor_anu_mes
-                if row.fonte == '32500701':
+                if row.fonte == '2500701':
                     sheet['G77'].value = row.valor_anu_ant
                     sheet['G85'].value = row.valor_anu_mes
-                if row.fonte == '52500701':
+                if row.fonte == '32500701':
                     sheet['G78'].value = row.valor_anu_ant
                     sheet['G86'].value = row.valor_anu_mes
+                if row.fonte == '52500701':
+                    sheet['G79'].value = row.valor_anu_ant
+                    sheet['G87'].value = row.valor_anu_mes
 
 
     if rpp_1619_data is not None:

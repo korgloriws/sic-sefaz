@@ -1,3 +1,4 @@
+
 from openpyxl import load_workbook
 import streamlit as st
 import pandas as pd
@@ -8,12 +9,12 @@ def process_qgr(file):
     df = pd.read_csv(file, encoding='latin1', delimiter=';')
   
     df_filtrado = df[df['CODIGO_RECEITA'].isin([
-        1751500100, 9217580111, 9817515001, 9917515001, 
+        1751500100, 1715530100, 9217580111, 9817515001, 9917515001, 
         1321010100, 1922510100, 1922990100, 9819229901, 
-        7922510100, 9819225101,9217515001
+        7922510100, 9819225101, 9217515001
     ])]
 
-    df_filtrado = df_filtrado[df_filtrado['FONTE_RECURSO'].isin([21540770, 21540000])]
+    df_filtrado = df_filtrado[df_filtrado['FONTE_RECURSO'].isin([21540770, 21540000, 21546000])]
 
     df_filtrado['VR_ARREC_ATE_MES_FONTE'] = (
         df_filtrado['VR_ARREC_ATE_MES_FONTE']
@@ -85,39 +86,41 @@ def fill_fundeb(file_path, qgr_data=None, ded_data=None, rpp_1619_data=None, rpn
         for row in qgr_data.itertuples():
             if row.CODIGO_RECEITA == 1751500100:
                 sheet['F8'].value = soma_qgr.get(1751500100, 0)
-            elif row.CODIGO_RECEITA == 9217580111:
+            elif row.CODIGO_RECEITA == 1715530100:
                 sheet['F9'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 9817515001:
+            elif row.CODIGO_RECEITA == 9217580111:
                 sheet['F10'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 9917515001:
+            elif row.CODIGO_RECEITA == 9817515001:
                 sheet['F11'].value = row.VR_ARREC_ATE_MES_FONTE
+            elif row.CODIGO_RECEITA == 9917515001:
+                sheet['F12'].value = row.VR_ARREC_ATE_MES_FONTE
             elif row.CODIGO_RECEITA == 1321010100:
-                sheet['F13'].value = row.VR_ARREC_ATE_MES_FONTE
+                sheet['F14'].value = row.VR_ARREC_ATE_MES_FONTE
             elif row.CODIGO_RECEITA == 1922510100:
-                sheet['F15'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 1922990100:
                 sheet['F16'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 7922510100:
+            elif row.CODIGO_RECEITA == 1922990100:
                 sheet['F17'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 9819225101:
+            elif row.CODIGO_RECEITA == 7922510100:
                 sheet['F18'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 9217515001:
+            elif row.CODIGO_RECEITA == 9819225101:
                 sheet['F19'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 9819229901:
+            elif row.CODIGO_RECEITA == 9217515001:
                 sheet['F20'].value = row.VR_ARREC_ATE_MES_FONTE
+            elif row.CODIGO_RECEITA == 9819229901:
+                sheet['F21'].value = row.VR_ARREC_ATE_MES_FONTE
 
         soma_fonte = qgr_data['VR_ARREC_ATE_MES_FONTE'].sum()
-        sheet['F46'].value = soma_fonte
+        sheet['F47'].value = soma_fonte
 
     mapeamento_celulas = {
-        "12.361": "F25",
-        "12.362": "F26",
-        "12.363": "F27",
-        "12.364": "F28",
-        "12.365": "F29",
-        "12.366": "F30",
-        "12.367": "F31",
-        "12.xxx": "F32"
+        "12.361": "F26",
+        "12.362": "F27",
+        "12.363": "F28",
+        "12.364": "F29",
+        "12.365": "F30",
+        "12.366": "F31",
+        "12.367": "F32",
+        "12.xxx": "F323"
     }
 
     if ded_data is not None:
