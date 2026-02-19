@@ -14,7 +14,7 @@ def process_qgr(file):
         7922510100, 9819225101, 9217515001
     ])]
 
-    df_filtrado = df_filtrado[df_filtrado['FONTE_RECURSO'].isin([21540770, 21540000, 21546000])]
+    df_filtrado = df_filtrado[df_filtrado['FONTE_RECURSO'].isin([21540770, 21540000, 21546770])]
 
     df_filtrado['VR_ARREC_ATE_MES_FONTE'] = (
         df_filtrado['VR_ARREC_ATE_MES_FONTE']
@@ -41,7 +41,7 @@ def process_ded(file):
 
 
 
-    df_filtrado = df[df['fonte'].isin(['21540770', '21540000'])]
+    df_filtrado = df[df['fonte'].isin(['21540770', '21540000', '21546770'])]
 
 
     df_filtrado = df_filtrado[df_filtrado['programatica'].str.startswith('12.')]
@@ -79,38 +79,23 @@ def fill_fundeb(file_path, qgr_data=None, ded_data=None, rpp_1619_data=None, rpn
     workbook = load_workbook(filename=file_path)
     sheet = workbook.worksheets[1]  
 
-
     if qgr_data is not None:
         soma_qgr = qgr_data.groupby('CODIGO_RECEITA')['VR_ARREC_ATE_MES_FONTE'].sum().to_dict()
+        # Preenche com as somas por código (evita sobrescrever com a última linha)
+        sheet['F8'].value  = soma_qgr.get(1751500100, 0)
+        sheet['F9'].value  = soma_qgr.get(1715530100, 0)
+        sheet['F10'].value = soma_qgr.get(9217580111, 0)
+        sheet['F11'].value = soma_qgr.get(9817515001, 0)
+        sheet['F12'].value = soma_qgr.get(9917515001, 0)
+        sheet['F14'].value = soma_qgr.get(1321011100, 0)
+        
+        sheet['F17'].value = soma_qgr.get(1922510100, 0)
 
-        for row in qgr_data.itertuples():
-            if row.CODIGO_RECEITA == 1751500100:
-                sheet['F8'].value = soma_qgr.get(1751500100, 0)
-            elif row.CODIGO_RECEITA == 1715530100:
-                sheet['F9'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 9217580111:
-                sheet['F10'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 9817515001:
-                sheet['F11'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 9917515001:
-                sheet['F12'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 1321010100:
-                sheet['F14'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 1922510100:
-                sheet['F16'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 1922990100:
-                sheet['F17'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 7922510100:
-                sheet['F18'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 9819225101:
-                sheet['F19'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 9217515001:
-                sheet['F20'].value = row.VR_ARREC_ATE_MES_FONTE
-            elif row.CODIGO_RECEITA == 9819229901:
-                sheet['F21'].value = row.VR_ARREC_ATE_MES_FONTE
+        sheet['F19'].value = soma_qgr.get(7922510100, 0)
+        sheet['F20'].value = soma_qgr.get(9217515001, 0)
+        sheet['F21'].value = soma_qgr.get(9819225101, 0)
 
-        soma_fonte = qgr_data['VR_ARREC_ATE_MES_FONTE'].sum()
-        sheet['F47'].value = soma_fonte
+        sheet['F47'].value = qgr_data['VR_ARREC_ATE_MES_FONTE'].sum()
 
     mapeamento_celulas = {
         "12.361": "F26",
@@ -129,13 +114,13 @@ def fill_fundeb(file_path, qgr_data=None, ded_data=None, rpp_1619_data=None, rpn
             sheet[celula].value = ded_data.get(categoria, 0)
 
    
-        sheet['F41'].value = ded_data.get("fonte_21540770", 0)
+        sheet['F42'].value = ded_data.get("fonte_21540770", 0)
    
     if rpp_1619_data is not None:
-        sheet['F26'].value = rpp_1619_data  
+        sheet['F36'].value = rpp_1619_data  
 
     if rpnp_1619_data is not None:
-        sheet['F27'].value = rpnp_1619_data 
+        sheet['F37'].value = rpnp_1619_data 
 
     workbook.save(filename=file_path)
     workbook.close()

@@ -46,7 +46,7 @@ def fill_demostrativo_saude(file_path, qgr_data=None, ded_data=None):
                                       '9211145111', '9211145112', '9311125001', '9311125002', 
                                       '9311125003', '9311125004', '9311125301', '9311125302', 
                                       '9311145111', '9311145112', '9311145113', '9311145114', 
-                                      '9111145111']:
+                                      '9111145111','9211130311']:
                 if row.VR_ARREC_ATE_MES_FONTE != 0:
                     soma_valores_especificos += row.VR_ARREC_ATE_MES_FONTE
 

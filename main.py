@@ -45,6 +45,7 @@ from comprovante_de_remessa.main import main as main43
 from fluxo_de_caixa_fundeb.main import main as main44 
 from comparador_recursos_disponiveis.app import main as main45
 from conferencia_balancete.app import main as main46
+from ctb_vs_PosicaodeBancosPorFonte.main import main as main47
 
 
 
@@ -63,7 +64,7 @@ categorias_programas = {
         'Conciliações Mensais': [ 'Balancete Sicof VS balancete Sicon', 'Despesa com Pessoal', #'Execucão orcamentária e financeira', 
         'Balancete VS CTB', 'FUNDEB', #'Comparador Ar',
         'MDE', 'Receita corrente líquida','Demonstrativo da saúde', 'Posição de Bancos por Fonte VS MSC',"Disponibilidade de Caixa",],
-        'Demais Conciliações': ['Somatório do CTB por orgãos','Totalizador do CTB por fonte',#'Posição de Bancos VS Matriz'
+        'Demais Conciliações': ['Somatório do CTB por orgãos','Totalizador do CTB por fonte', 'CTB x Posicao de Bancos por Fonte' #'Posição de Bancos VS Matriz'
                                 ],
         'Módulo AM': ['Consórcio das Mulheres', 'ICISMEP', 'Comparador do EMP', 'ANL'],
     },
@@ -109,7 +110,7 @@ programas_funcoes = {
     'Rec VS ementário da receita' : main30,
     'Fontes co': main31,
     'Somatório da matriz por Banco conta e fonte': main32,
-    'Comparação de Saldos do Balancete': main33,
+    'Comparação dos saldos de encerramento': main33,
     'Totalizador do CTB por fonte': main34,
     'Depósitos judicias': main35,
     'Relacão de trabalhadores do FGTS': main36,
@@ -122,7 +123,7 @@ programas_funcoes = {
     'Fluxo de Caixa FUNDEB': main44,
     'Comparador de recursos disponíveis': main45,
     'Conferência de Balancete para saldos invertidos': main46,
- 
+    'CTB x Posicao de Bancos por Fonte': main47,
 }
 
 

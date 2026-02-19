@@ -57,7 +57,7 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
     soma_valores_G64 = 0
     soma_valores_G65 = 0
     soma_valores_G67 = 0
-    soma_valores_G70 = 0
+    soma_valores_G71 = 0
     soma_valores_especificos = 0
     
 
@@ -180,7 +180,7 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
                     soma_valores_G64 += row.VR_ARREC_ATE_MES_FONTE
 
             if row.CODIGO_RECEITA == '1715530100':
-                if row.FONTE_RECURSO in ['21546000']:
+                if row.FONTE_RECURSO in ['21546770']:
                     soma_valores_G65 += row.VR_ARREC_ATE_MES_FONTE
 
         sheet['G56'].value = soma_valores_G56
@@ -210,11 +210,13 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
             if row.fonte == '52500701':
                 sheet['G54'].value = row.liq_ate_mes
             elif row.fonte in ['21540770', '21540000']:
-                soma_valores_G67 += row.liq_ate_mes
-            elif row.fonte in ['22540770', '22540000']:
-                soma_valores_G70 += row.pag_ate_mes
 
-        sheet['G70'].value = soma_valores_G70
+                soma_valores_G67 += row.liq_ate_mes
+            elif row.fonte in ['22540770', '22540000','21546770']:
+
+                soma_valores_G71 += row.pag_ate_mes
+
+        sheet['G71'].value = soma_valores_G71
         sheet['G67'].value = soma_valores_G67
 
         if rpnp_data is not None:

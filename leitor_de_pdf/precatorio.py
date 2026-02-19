@@ -101,8 +101,14 @@ def to_pdf(df: pd.DataFrame) -> bytes:
         pdf.cell(col_widths[1], 8, str(row["Total"]), border=1)
         pdf.ln()
 
-
-    return pdf.output(dest="S").encode("latin-1")
+    out = pdf.output(dest="S")
+    if isinstance(out, str):
+        return out.encode("latin-1", "replace")
+    if isinstance(out, (bytes, bytearray)):
+        return bytes(out)
+    # Fallback: ensure bytes
+    return bytes(out)
+    
 # -------------------------------------------------------------------------
 
 def main():
@@ -135,7 +141,7 @@ def main():
                     label="Download PDF file",
                     data=pdf_data,
                     file_name=f"{filename}.pdf",
-                    mime='application/octet-stream'
+                    mime='application/pdf'
                 )
         
 
