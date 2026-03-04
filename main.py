@@ -1,4 +1,5 @@
 import streamlit as st
+from pathlib import Path
 
 
 from balancete_vs_ctb.comparador_2 import main as main1 # VV
@@ -15,7 +16,7 @@ from comparadorCD.comparador import main as main11 #XX
 from cismep.cismep import main as main12 # VV
 #from comparador_Ar.main4 import main as main13
 from fundeb.mainLinux import main as main14 #VV
-#from Formulario_credor.mainLinux import main as main15 
+from Formulario_credor.mainLinux import main as main15 
 from demonstrativo_da_saude.mainLinux import main as main16 #VV
 from somatorio_ctb.main import main as main17 #VV
 from mde.main import main as main18 #vv
@@ -46,6 +47,8 @@ from fluxo_de_caixa_fundeb.main import main as main44
 from comparador_recursos_disponiveis.app import main as main45
 from conferencia_balancete.app import main as main46
 from ctb_vs_PosicaodeBancosPorFonte.main import main as main47
+from Formulario_credor.main_pessoa_fisica import main as main48
+from apuracao_saldo_patrimonial.apuracao_saldo_patrimonial import main as main49
 
 
 
@@ -53,7 +56,7 @@ from ctb_vs_PosicaodeBancosPorFonte.main import main as main47
 
 categorias_programas = {
     'Módulo da Contabilidade': {
-        'Geradores De relatórios': ['Precatório', #'Formulário de credor / IR RFB',
+        'Geradores De relatórios': ['Precatório', 'Formulário de credor / IR RFB', 'Formulário de credor / IR RFB Pessoa Física', 'Apuração de saldo patrimonial',
         'Comparação dos saldos de encerramento','Comparador de PCASPs'],
         'Conciliações Mensais': ['Balancete da Câmara VS o Balancete do SICOF', 'DED Câmara VS DED SICOF',  'Restos a pagar Câmara VS SICOF',
         'Comparador crédito e débito', 'DDR','Comparador de recursos disponíveis','Conferência de Balancete para saldos invertidos'],
@@ -93,7 +96,9 @@ programas_funcoes = {
     'ICISMEP': main12,
     #'Comparador Ar': main13,
     'FUNDEB': main14,
-    #'Formulário de credor / IR RFB': main15,
+    'Formulário de credor / IR RFB': main15,
+   
+ 
     'Demonstrativo da saúde': main16,
     'Somatório do CTB por orgãos': main17,
     'MDE': main18,
@@ -124,6 +129,8 @@ programas_funcoes = {
     'Comparador de recursos disponíveis': main45,
     'Conferência de Balancete para saldos invertidos': main46,
     'CTB x Posicao de Bancos por Fonte': main47,
+    'Formulário de credor / IR RFB Pessoa Física': main48,
+    'Apuração de saldo patrimonial': main49,
 }
 
 
@@ -138,10 +145,18 @@ def get_all_programas():
 st.sidebar.markdown("# SIC SEFAZ")
 
 
-st.sidebar.link_button(
-    "Documentação SIC SEFAZ",
-    "https://prefeituracontagem.sharepoint.com/sites/sefaz-supcenc/Documentos%20Compartilhados/Forms/AllItems.aspx?viewid=3712bc83%2Dbe22%2D4f1a%2D8418%2D959de272683f&id=%2Fsites%2Fsefaz%2Dsupcenc%2FDocumentos%20Compartilhados%2FMateus%20Augusto%2FManual%20SIC%20SEFAZ%2FPDF%2F0%2E%20Manual%20do%20SIC%20SEFAZ%2Epdf&parent=%2Fsites%2Fsefaz%2Dsupcenc%2FDocumentos%20Compartilhados%2FMateus%20Augusto%2FManual%20SIC%20SEFAZ%2FPDF",
-)
+# Documentação: PDF na raiz do projeto (sem SharePoint)
+_path_pdf = Path(__file__).parent / "0. Manual do SIC SEFAZ.pdf"
+if _path_pdf.exists():
+    with open(_path_pdf, "rb") as f:
+        st.sidebar.download_button(
+            "Documentação SIC SEFAZ",
+            data=f.read(),
+            file_name="0. Manual do SIC SEFAZ.pdf",
+            mime="application/pdf",
+        )
+else:
+    st.sidebar.caption("Documentação não encontrada.")
 
 
 

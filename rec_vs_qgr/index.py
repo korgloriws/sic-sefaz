@@ -70,13 +70,17 @@ def fonte_nucleo_qgr(valor):
 
 def co_norm(valor):
     s = somente_digitos(valor)
-    # Se não começa com '3', considerar como '0000'
-    if not s or not s.startswith('3'):
+    if not s:
         return '0000'
-    # Começa com '3': manter padronizado para 4 dígitos
-    if len(s) >= 4:
-        return s[:4]
-    return s.zfill(4)
+    # Remove zeros à esquerda para não diferenciar "03123" (QGR) de "3123" (REC)
+    s_util = s.lstrip('0') or '0'
+    # Só os que começam com 3 (após remover zeros) são CO válidos; resto vira 0000 e soma junto
+    if not s_util.startswith('3'):
+        return '0000'
+    # Padronizar em 4 dígitos (usar s_util para não repor zeros desnecessários na frente)
+    if len(s_util) >= 4:
+        return s_util[:4]
+    return s_util.zfill(4)
 
 def to_num(valor):
     if isinstance(valor, (int, float)) and np.isfinite(valor):
@@ -108,16 +112,33 @@ def detectar_coluna_valor(df):
         return 'VR_ARREC_MES'
     return None
 
+
+def obter_serie_co(df):
+    """
+    Retorna a série (coluna) de CO do DataFrame.
+    No REC o layout às vezes vem sem nome 'CO' (ex.: Unnamed: 4).
+    Se não existir coluna 'CO', usa a 5ª coluna (índice 4), que costuma ser CO no REC.
+    """
+    if 'CO' in df.columns:
+        return df['CO'].copy()
+    # REC com colunas sem nome: COD_ID, CODIGO_RECEITA, FONTE_RECURSO, Unnamed:3, Unnamed:4, ...
+    # CO costuma estar na 5ª coluna (índice 4)
+    if df.shape[1] >= 5:
+        return df.iloc[:, 4].copy()
+    return pd.Series([''] * len(df), index=df.index)
+
+
 def agregar_por_trinca(df, is_qgr=False):
    
     valor_col = detectar_coluna_valor(df)
     if valor_col is None:
         return pd.DataFrame(columns=['CODIGO_RECEITA', 'FONTE_NUCLEO', 'CO', 'VALOR'])
 
+    serie_co = obter_serie_co(df)
     tmp = pd.DataFrame({
         'CODIGO_RECEITA': df.get('CODIGO_RECEITA', ''),
         'FONTE_RECURSO': df.get('FONTE_RECURSO', ''),
-        'CO': df.get('CO', ''),
+        'CO': serie_co,
         'VALOR_RAW': df.get(valor_col, 0)
     })
 
@@ -254,10 +275,10 @@ def validar_co(df_rec_original, df_geral_original):
             s = s[:-2]
         return s
 
-    def somente_quatro_digitos(valor):
-        s = normalizar_co(valor)
-        s = re.sub(r'\D', '', s)
-        return s if len(s) == 4 else ''
+    # Usar a mesma regra de co_norm: remove zeros à esquerda; só CO que começa com 3 é considerado
+    def co_normalizado_para_comparacao(valor):
+        n = co_norm(valor)
+        return n if n != '0000' else ''
 
     def primeiro_valor_nao_vazio(serie):
         for v in serie:
@@ -307,9 +328,8 @@ def validar_co(df_rec_original, df_geral_original):
     )
 
 
-    rec_co['CO_REC_N'] = rec_co['CO_REC'].apply(somente_quatro_digitos)
-    qgr_co['CO_QGR_N'] = qgr_co['CO_QGR'].apply(somente_quatro_digitos)
-
+    rec_co['CO_REC_N'] = rec_co['CO_REC'].apply(co_normalizado_para_comparacao)
+    qgr_co['CO_QGR_N'] = qgr_co['CO_QGR'].apply(co_normalizado_para_comparacao)
 
     combinado = pd.merge(rec_co, qgr_co, on=['CODIGO_RECEITA_KEY', 'FR_KEY'], how='outer')
     combinado['CO_REC'] = combinado['CO_REC'].fillna('')
@@ -317,6 +337,7 @@ def validar_co(df_rec_original, df_geral_original):
     combinado['CO_REC_N'] = combinado['CO_REC_N'].fillna('')
     combinado['CO_QGR_N'] = combinado['CO_QGR_N'].fillna('')
 
+    # "Tem CO" = normalizado não é vazio (ou seja, CO começa com 3)
     rec_tem4 = combinado['CO_REC_N'] != ''
     qgr_tem4 = combinado['CO_QGR_N'] != ''
     mask_apenas_um = rec_tem4 ^ qgr_tem4
@@ -381,8 +402,11 @@ def main():
  
         if 'COD_ID' in df_rec.columns:
             df_rec = df_rec[df_rec['COD_ID'] == 11]
+        # REC às vezes vem sem coluna nomeada 'CO' (ex.: Unnamed: 4); preencher para comparação e validar_co
+        if 'CO' not in df_rec.columns:
+            df_rec = df_rec.copy()
+            df_rec['CO'] = obter_serie_co(df_rec)
 
-   
         agg_qgr_df = agregar_por_trinca(df_geral, is_qgr=True)
         agg_rec_df = agregar_por_trinca(df_rec, is_qgr=False)
 

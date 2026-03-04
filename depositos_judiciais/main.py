@@ -86,6 +86,54 @@ def parse_ret_file(file_content: str):
 
     return registros
 
+MESES_PT = {
+    1: "janeiro", 2: "fevereiro", 3: "março", 4: "abril", 5: "maio", 6: "junho",
+    7: "julho", 8: "agosto", 9: "setembro", 10: "outubro", 11: "novembro", 12: "dezembro"
+}
+
+def extrair_data_arquivo(file_content: str) -> str | None:
+    """Extrai a data do arquivo .RET (ex.: ,EM:19.02.2026) e retorna formatada: '19 DE FEVEREIRO DE 2026'."""
+    match = re.search(r",EM:(\d{2})\.(\d{2})\.(\d{4})", file_content)
+    if not match:
+        return None
+    d, m, y = match.group(1), match.group(2), match.group(3)
+    dia = int(d)
+    mes_num = int(m)
+    ano = int(y)
+    mes_nome = MESES_PT.get(mes_num, m)
+    return f"{dia} DE {mes_nome.upper()} DE {ano}"
+
+def _eh_municipio_contagem(nome: str) -> bool:
+    """Considera também o erro de codificação 'MunicOpio' (O em vez de Í)."""
+    if not nome:
+        return False
+    s = str(nome).strip().upper()
+    return s == "MUNICIPIO DE CONTAGEM" or s == "MUNICOPIO DE CONTAGEM"
+
+def normalizar_nome_credor_pdf(nome: str) -> str:
+    """Para exibição no PDF: corrige 'MunicOpio de Contagem' para 'MUNICIPIO DE CONTAGEM'."""
+    if not nome or not isinstance(nome, str):
+        return nome
+    s = nome.strip()
+    if _eh_municipio_contagem(s):
+        return "MUNICIPIO DE CONTAGEM"
+    return nome
+
+def favorecido_do_registro(polo_ativo: str, polo_passivo: str) -> str:
+    """Retorna o nome do favorecido (quem não é MUNICIPIO DE CONTAGEM, incluindo variante com erro de escrita)."""
+    if polo_ativo and not _eh_municipio_contagem(polo_ativo):
+        return str(polo_ativo).strip()
+    if polo_passivo and not _eh_municipio_contagem(polo_passivo):
+        return str(polo_passivo).strip()
+    return ""
+
+def texto_importe(numero_processo: str, favorecido: str, data_formatada: str) -> str:
+    return (
+        f"IMPORTE PROVENIENTE DE SENTENÇA JUDICIAL DESFAVORÁVEL AO MUNICÍPIO, REFERENTE AO PROCESSO JUDICIAL Nº {numero_processo}, "
+        f"SENDO O FAVORECIDO {favorecido}, OCORRIDO EM {data_formatada}, EM CONFORMIDADE COM A LEI COMPLEMENTAR 151/2015 E "
+        "CONTRATO ADMINISTRATIVO 111/2021, FIRMADO ENTRE O BANCO DO BRASIL S/A E O MUNICÍPIO DE CONTAGEM."
+    )
+
 def renomear_colunas(df):
     return df.rename(columns={
         "numero_processo": "Nº PROCESSO TJMG",
@@ -108,8 +156,8 @@ def to_excel(df: pd.DataFrame) -> bytes:
         worksheet.cell(row=last_row + 1, column=1, value="5RESGATES CONTRA O GOVERNO")
     return output.getvalue()
 
-def to_pdf(df: pd.DataFrame) -> bytes:
-    pdf = FPDF(orientation='L') 
+def to_pdf(df: pd.DataFrame, data_formatada: str | None = None) -> bytes:
+    pdf = FPDF(orientation='L')
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 10, "Relatório do Arquivo Depósito Judicial", ln=True, align="C")
@@ -125,9 +173,27 @@ def to_pdf(df: pd.DataFrame) -> bytes:
 
     pdf.set_font("Arial", "", 7)
     for _, row in df.iterrows():
+        # Pular linha de TOTAL (não é credor)
+        is_total = str(row.get("POLO ATIVO", "")).strip().upper() == "TOTAL"
         for i, col in enumerate(headers):
-            pdf.cell(col_widths[i], 7, str(row[col]), border=1)
+            valor = row[col]
+            if col in ("POLO ATIVO", "POLO PASSIVO"):
+                valor = normalizar_nome_credor_pdf(str(valor))
+            pdf.cell(col_widths[i], 7, str(valor), border=1)
         pdf.ln()
+
+        # Uma linha de descrição por credor
+        if not is_total:
+            numero_processo = str(row.get("Nº PROCESSO TJMG", "")).strip()
+            polo_ativo = str(row.get("POLO ATIVO", "")).strip()
+            polo_passivo = str(row.get("POLO PASSIVO", "")).strip()
+            favorecido = favorecido_do_registro(polo_ativo, polo_passivo)
+            data_texto = data_formatada if data_formatada else "DATA NÃO IDENTIFICADA NO ARQUIVO"
+            texto = texto_importe(numero_processo, favorecido, data_texto)
+            pdf.set_font("Arial", "", 6)
+            pdf.multi_cell(0, 4, texto)
+            pdf.set_font("Arial", "", 7)
+            pdf.ln(2)
 
     pdf.ln(5)
     pdf.set_font("Arial", "I", 8)
@@ -155,8 +221,10 @@ def main():
             df.loc[len(df)] = ["", "TOTAL", "", "", "", "", f"{total:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")]
             st.dataframe(df)
 
+            data_formatada = extrair_data_arquivo(file_content)
+
             st.download_button("Baixar XLSX", to_excel(df), "relatorio_ret.xlsx")
-            st.download_button("Baixar PDF", to_pdf(df), "relatorio_ret.pdf")
+            st.download_button("Baixar PDF", to_pdf(df, data_formatada=data_formatada), "relatorio_ret.pdf")
         else:
             st.warning("Não foram encontrados registros no arquivo.")
 

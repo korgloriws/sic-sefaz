@@ -16,6 +16,16 @@ def brazilian_formatter(x):
         int_part_with_dot = f"{int(int_part):,}".replace(",", ".")
         return f"{int_part_with_dot},{decimal_part}"
 
+def sanitize_filename(name):
+    """Remove caracteres inválidos do nome do arquivo (ex: / em 'ALGAR TELECOM S/A')."""
+    if name is None:
+        return "credor"
+    s = str(name).strip()
+    for char in r'/\:*?"<>|':
+        s = s.replace(char, "-")
+    return s.strip("-") or "credor"
+
+
 def save_uploaded_file(uploaded_file):
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
@@ -27,7 +37,8 @@ def save_uploaded_file(uploaded_file):
 
 def fill_and_save_form(group, name, payment_month, payment_date, template_file_path):
     try:
-        output_file_name = f'Preenchido_{name}_Anexo_V - Comprovante de Retenção.xlsx'
+        safe_name = sanitize_filename(name)
+        output_file_name = f'Preenchido_{safe_name}_Anexo_V - Comprovante de Retenção.xlsx'
         output_file_path = os.path.join(tempfile.gettempdir(), output_file_name)
 
         shutil.copy(template_file_path, output_file_path)

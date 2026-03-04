@@ -151,7 +151,7 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
             elif row.CODIGO_RECEITA in ['1751000000','1751500000','1751500100','1751500100','9817515001']:
                 soma_valores_G57 += row.VR_ARREC_ATE_MES_FONTE
 
-            if row.CODIGO_RECEITA == '1321010100':
+            if row.CODIGO_RECEITA == '1321011100':
                 if row.FONTE_RECURSO in ['21540770','21540000','31500701','51500701']:
                     soma_valores_G58 += row.VR_ARREC_ATE_MES_FONTE
 
@@ -244,23 +244,23 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
     if rpp_1619_data is not None:
         for row in rpp_1619_data.itertuples():
             if row.fonte == '1500701':
-                sheet['G89'].value = row.valor_anu_ant
-                sheet['G97'].value = row.valor_anu_mes
-            if row.fonte == '31500701':
                 sheet['G90'].value = row.valor_anu_ant
                 sheet['G98'].value = row.valor_anu_mes
-            if row.fonte == '51500701':
+            if row.fonte == '31500701':
                 sheet['G91'].value = row.valor_anu_ant
                 sheet['G99'].value = row.valor_anu_mes
-            if row.fonte == '2500701':
+            if row.fonte == '51500701':
                 sheet['G92'].value = row.valor_anu_ant
                 sheet['G100'].value = row.valor_anu_mes
-            if row.fonte == '32500701':
+            if row.fonte == '2500701':
                 sheet['G93'].value = row.valor_anu_ant
                 sheet['G101'].value = row.valor_anu_mes
-            if row.fonte == '52500701':
+            if row.fonte == '32500701':
                 sheet['G94'].value = row.valor_anu_ant
                 sheet['G102'].value = row.valor_anu_mes
+            if row.fonte == '52500701':
+                sheet['G95'].value = row.valor_anu_ant
+                sheet['G103'].value = row.valor_anu_mes
 
     workbook.save(file_path)
     workbook.close()
