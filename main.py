@@ -1,7 +1,6 @@
 import streamlit as st
 from pathlib import Path
 
-
 from balancete_vs_ctb.comparador_2 import main as main1 # VV
 from leitor_de_pdf.precatorio import main as main2 # VV
 from rec_vs_qgr.index import main as main3 #VV
@@ -143,7 +142,6 @@ def get_all_programas():
 
 
 st.sidebar.markdown("# SIC SEFAZ")
-
 
 # Documentação: PDF na raiz do projeto (sem SharePoint)
 _path_pdf = Path(__file__).parent / "0. Manual do SIC SEFAZ.pdf"

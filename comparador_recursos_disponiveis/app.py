@@ -439,19 +439,25 @@ def compute_campos(df_990: pd.DataFrame, df_balancete: pd.DataFrame) -> List[flo
         if fallback3 != 0.0:
             campo3 = fallback3
  
-    campo4 = _sum_diff_for_prefix(dfbal_std, allowed_codes_t5, "6311", match_mode="prefix")
+    campo4 = _sum_diff_for_prefix(dfbal_std, allowed_codes_t5, "63171", match_mode="prefix")
     if campo4 == 0.0:
-        fallback4 = _sum_diff_prefix_only(dfbal_std, "6311")
+        fallback4 = _sum_diff_prefix_only(dfbal_std, "63171")
         if fallback4 != 0.0:
             campo4 = fallback4
  
-    campo5 = _sum_diff_for_prefix(dfbal_std, allowed_codes_t5, "8211101", match_mode="prefix")
+    campo5 = _sum_diff_for_prefix(dfbal_std, allowed_codes_t5, "6311", match_mode="prefix")
     if campo5 == 0.0:
-        fallback5 = _sum_diff_prefix_only(dfbal_std, "8211101")
+        fallback5 = _sum_diff_prefix_only(dfbal_std, "6311")
         if fallback5 != 0.0:
             campo5 = fallback5
 
-    return [campo1, campo2, campo3, campo4, campo5]
+    campo6 = _sum_diff_for_prefix(dfbal_std, allowed_codes_t5, "8211101", match_mode="prefix")
+    if campo6 == 0.0:
+        fallback6 = _sum_diff_prefix_only(dfbal_std, "8211101")
+        if fallback6 != 0.0:
+            campo6 = fallback6
+
+    return [campo1, campo2, campo3, campo4, campo5, campo6]
 
 
 def _aggregate_sum_by_code(
@@ -550,7 +556,7 @@ def compute_campos_with_details(
     det3["campo"] = 3
 
  
-    prefix = _norm_code("6311")
+    prefix = _norm_code("63171")
     mask_prefix = bal_codes.str.startswith(prefix)
     if allowed_t5_all:
         allowed_list = list(allowed_t5_all)
@@ -567,7 +573,7 @@ def compute_campos_with_details(
     det4["campo"] = 4
 
 
-    prefix = _norm_code("8211101")
+    prefix = _norm_code("6311")
     mask_prefix = bal_codes.str.startswith(prefix)
     if allowed_t5_all:
         allowed_list = list(allowed_t5_all)
@@ -583,8 +589,24 @@ def compute_campos_with_details(
         det5_total = float(det5["valor"].sum()) if not det5.empty else 0.0
     det5["campo"] = 5
 
-    valores = [det1_total, det2_total, det3_total, det4_total, det5_total]
-    detalhes_df = pd.concat([det1, det2, det3, det4, det5], ignore_index=True)
+    prefix = _norm_code("8211101")
+    mask_prefix = bal_codes.str.startswith(prefix)
+    if allowed_t5_all:
+        allowed_list = list(allowed_t5_all)
+        allowed_prefix_mask = bal_codes.apply(lambda c: any(c.startswith(ac) for ac in allowed_list if ac))
+        rows_mask_6 = mask_prefix & allowed_prefix_mask
+    else:
+        rows_mask_6 = mask_prefix
+    det6 = _aggregate_diff_by_code(dfbal_std, rows_mask_6)
+    det6_total = float(det6["valor"].sum()) if not det6.empty else 0.0
+    if det6_total == 0.0:
+        rows_mask_6_fb = mask_prefix
+        det6 = _aggregate_diff_by_code(dfbal_std, rows_mask_6_fb)
+        det6_total = float(det6["valor"].sum()) if not det6.empty else 0.0
+    det6["campo"] = 6
+
+    valores = [det1_total, det2_total, det3_total, det4_total, det5_total, det6_total]
+    detalhes_df = pd.concat([det1, det2, det3, det4, det5, det6], ignore_index=True)
 
     detalhes_df = detalhes_df[["campo", "cod_contabil", "valor"]]
 
@@ -610,7 +632,7 @@ def _prepare_template_bytes(template_file, valores: List[float], detalhes: Optio
     ws = wb.active
 
    
-    targets = ["B2", "B3", "B4", "B5", "B7"]
+    targets = ["B2", "B3", "B4", "B5", "B6", "B8"]
     for cell_ref, value in zip(targets, valores):
         ws[cell_ref] = value
 
@@ -671,8 +693,9 @@ def main() -> None:
                 "Campo 1 (prefixo 1, d\u00e9bito atual)",
                 "Campo 2 (prefixo 2, cr\u00e9dito atual)",
                 "Campo 3 (prefixo 6221301, cr\u00e9dito atual)",
-                "Campo 4 (prefixo 6311, cr\u00e9dito atual)",
-                "Campo 5 (prefixo 8211101, cr\u00e9dito atual)",
+                "Campo 4 (prefixo 63171, cr\u00e9dito atual)",
+                "Campo 5 (prefixo 6311, cr\u00e9dito atual)",
+                "Campo 6 (prefixo 8211101, cr\u00e9dito atual)",
             ]
             st.dataframe(
                 pd.DataFrame({"Campo": labels, "Valor": valores}),

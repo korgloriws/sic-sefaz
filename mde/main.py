@@ -16,7 +16,7 @@ def process_ded(file_path):
     df['fonte'] = df['fonte'].astype(str)
     df['liq_ate_mes'] = df['liq_ate_mes'].str.replace('.', '').str.replace(',', '.').astype(float)
     df['pag_ate_mes'] = pd.to_numeric(df['pag_ate_mes'].str.replace('.', '').str.replace(',', '.'), errors='coerce')
-    fontes_especificas = ['1500701', '2500701', '31500701', '51500701', '2500701', '21540770', '22540770']
+    fontes_especificas = ['1500701', '2500701', '31500701', '51500701', '2500701', '21540770', '22540770',"22546770"]
     df_filtrado = df[df['fonte'].isin(fontes_especificas)]
     resultado = df_filtrado.groupby('fonte')[['liq_ate_mes', 'pag_ate_mes']].sum()
     return resultado.reset_index()
@@ -139,7 +139,7 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
                 '9211125004','9211125301','9211130341','9211145111','9211145112','9311125001',
                 '9311125002','9311125003','9311125004','9311125301','9311125302','9311145111',
                 '9311145112','9311145113','9311145114','9111145111','9111145131','9111145121',
-                '9211130311'
+                '9211130311',"9311125303"
                 
             ]:
                 soma_valores_especificos += row.VR_ARREC_ATE_MES_FONTE
@@ -152,7 +152,7 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
                 soma_valores_G57 += row.VR_ARREC_ATE_MES_FONTE
 
             if row.CODIGO_RECEITA == '1321011100':
-                if row.FONTE_RECURSO in ['21540770','21540000','31500701','51500701']:
+                if row.FONTE_RECURSO in ['21540770','21540000','31500701','51500701','21546770']:
                     soma_valores_G58 += row.VR_ARREC_ATE_MES_FONTE
 
             if row.CODIGO_RECEITA == '1922990100':
@@ -212,7 +212,7 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
             elif row.fonte in ['21540770', '21540000']:
 
                 soma_valores_G67 += row.liq_ate_mes
-            elif row.fonte in ['22540770', '22540000','21546770']:
+            elif row.fonte in ['22540770', '22540000','22546770']:
 
                 soma_valores_G71 += row.pag_ate_mes
 
