@@ -8,9 +8,11 @@ import pdfplumber
 import streamlit as st
 
 COLUNA_NOME = "Nome Trabalhador"
+# Incrementar ao mudar a lógica (evita cache antigo na nuvem)
+EXTRACTION_VERSION = 3
 
 _INVALID_NAME_RE = re.compile(
-    r"(reais|guia|fgts|trabalhadores|estabelecimento|empregador|expressos)",
+    r"(reais|guia|trabalhadores|estabelecimento|empregador|expressos)",
     re.IGNORECASE,
 )
 _CPF_RE = re.compile(r"\d{3}\.\d{3}\.\d{3}-\d{2}")
@@ -106,7 +108,6 @@ def _score_name_column(table: list[list], col_index: int, start_row: int) -> int
 
 
 def _resolve_name_column_index(table: list[list]) -> tuple[int | None, int]:
-    """Acha coluna do nome pelo cabeçalho; se vazia, testa colunas vizinhas (FGTS.pdf)."""
     header_row_idx = 0
     header_row = table[0] if table else []
     header_col = None
@@ -143,60 +144,74 @@ def _resolve_name_column_index(table: list[list]) -> tuple[int | None, int]:
     return best_col, header_row_idx
 
 
-def _extract_names_from_pdf_bytes(pdf_bytes: bytes) -> list[str]:
+def _names_from_page_words(words: list[dict], seen: set[str]) -> list[str]:
     names: list[str] = []
-    seen: set[str] = set()
+    bounds = _find_column_bounds(words)
+    if not bounds:
+        return names
 
-    def add_name(name: str) -> None:
+    col_left, col_right, header_bottom = bounds
+    lines: dict[float, list[dict]] = defaultdict(list)
+    for w in words:
+        if w["top"] <= header_bottom:
+            continue
+        if w["x0"] >= col_right or w["x1"] <= col_left:
+            continue
+        lines[round(w["top"] / 3) * 3].append(w)
+
+    for line_key in sorted(lines.keys()):
+        line_words = sorted(lines[line_key], key=lambda x: x["x0"])
+        parts = [_clean_word_token(w["text"]) for w in line_words]
+        parts = [p for p in parts if p]
+        while parts and re.fullmatch(r"\d{4,6}", parts[-1]):
+            parts.pop()
+        name = _normalize_text(" ".join(parts))
         if _is_valid_name(name) and name not in seen:
             seen.add(name)
             names.append(name)
-
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        for page in pdf.pages:
-            # --- Método 1: palavras por coordenada da coluna ---
-            words = page.extract_words() or []
-            bounds = _find_column_bounds(words)
-            if bounds:
-                col_left, col_right, header_bottom = bounds
-                lines: dict[float, list[dict]] = defaultdict(list)
-                for w in words:
-                    if w["top"] <= header_bottom:
-                        continue
-                    if w["x0"] >= col_right or w["x1"] <= col_left:
-                        continue
-                    lines[round(w["top"] / 3) * 3].append(w)
-
-                for line_key in sorted(lines.keys()):
-                    line_words = sorted(lines[line_key], key=lambda x: x["x0"])
-                    parts = [_clean_word_token(w["text"]) for w in line_words]
-                    parts = [p for p in parts if p]
-                    while parts and re.fullmatch(r"\d{4,6}", parts[-1]):
-                        parts.pop()
-                    add_name(_normalize_text(" ".join(parts)))
-
-            # --- Método 2: tabela (coluna pode estar deslocada no FGTS.pdf) ---
-            for table in page.extract_tables() or []:
-                if not table:
-                    continue
-                col_index, header_row = _resolve_name_column_index(table)
-                if col_index is None:
-                    continue
-                for row in table[header_row + 1 :]:
-                    if not row or len(row) <= col_index:
-                        continue
-                    add_name(_normalize_text(row[col_index]))
-
     return names
 
 
-@st.cache_data(show_spinner=False)
-def extract_worker_names_cached(pdf_bytes: bytes) -> tuple[list[str], str]:
-    try:
-        names = _extract_names_from_pdf_bytes(pdf_bytes)
-        return names, ""
-    except Exception as exc:
-        return [], str(exc)
+def _names_from_page_tables(tables: list, seen: set[str]) -> list[str]:
+    names: list[str] = []
+    for table in tables or []:
+        if not table:
+            continue
+        col_index, header_row = _resolve_name_column_index(table)
+        if col_index is None:
+            continue
+        for row in table[header_row + 1 :]:
+            if not row or len(row) <= col_index:
+                continue
+            name = _normalize_text(row[col_index])
+            if _is_valid_name(name) and name not in seen:
+                seen.add(name)
+                names.append(name)
+    return names
+
+
+def _extract_names_from_pdf_bytes(
+    pdf_bytes: bytes,
+    progress_callback=None,
+) -> list[str]:
+    seen: set[str] = set()
+    all_names: list[str] = []
+
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        total_pages = len(pdf.pages)
+        for page_no, page in enumerate(pdf.pages, start=1):
+            if progress_callback:
+                progress_callback(page_no, total_pages)
+
+            words = page.extract_words() or []
+            tables = page.extract_tables() or []
+
+            # Tabela primeiro; palavras complementam nomes partidos no PDF
+            page_names = _names_from_page_tables(tables, seen)
+            page_names.extend(_names_from_page_words(words, seen))
+            all_names.extend(page_names)
+
+    return all_names
 
 
 @st.cache_data
@@ -216,31 +231,53 @@ def main() -> None:
         return
 
     pdf_bytes = _pdf_bytes(uploaded_file)
-
-    with st.spinner("Extraindo nomes do PDF (pode levar alguns segundos em arquivos grandes)..."):
-        names, error = extract_worker_names_cached(pdf_bytes)
-
-    if error:
-        st.error(f"Erro ao ler o PDF: {error}")
+    if not pdf_bytes:
+        st.error("Arquivo vazio ou não foi possível ler o upload.")
         return
+
+    progress = st.progress(0, text="Iniciando leitura do PDF...")
+    status = st.empty()
+
+    def on_progress(page_no: int, total_pages: int) -> None:
+        pct = page_no / max(total_pages, 1)
+        progress.progress(pct, text=f"Lendo página {page_no} de {total_pages}...")
+        status.caption(f"Versão extração: v{EXTRACTION_VERSION} | pdfplumber {pdfplumber.__version__}")
+
+    try:
+        names = _extract_names_from_pdf_bytes(pdf_bytes, progress_callback=on_progress)
+    except Exception as exc:
+        progress.empty()
+        status.empty()
+        st.error("Erro ao processar o PDF na leitura das páginas.")
+        st.exception(exc)
+        return
+
+    progress.progress(1.0, text="Leitura concluída.")
+    status.empty()
 
     if not names:
         st.error(f"Não foi possível extrair a coluna **{COLUNA_NOME}** deste PDF.")
-        with st.expander("Diagnóstico (1ª página)"):
+        with st.expander("Diagnóstico (ambiente e 1ª página)"):
+            st.write(f"pdfplumber: `{pdfplumber.__version__}`")
+            st.write(f"Tamanho do arquivo: {len(pdf_bytes):,} bytes")
             try:
                 with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                    st.write(f"Páginas: {len(pdf.pages)}")
                     if pdf.pages:
                         page = pdf.pages[0]
-                        st.write("Palavras (amostra):", page.extract_words()[:15])
+                        words = page.extract_words() or []
+                        st.write(f"Palavras na pág. 1: {len(words)}")
+                        st.write("Bounds:", _find_column_bounds(words))
                         tables = page.extract_tables() or []
-                        st.write(f"Tabelas: {len(tables)}")
+                        st.write(f"Tabelas na pág. 1: {len(tables)}")
                         if tables:
-                            st.write("Cabeçalho:", tables[0][0])
-                            st.write("1ª linha:", tables[0][1] if len(tables[0]) > 1 else None)
                             col, _ = _resolve_name_column_index(tables[0])
-                            st.write(f"Coluna detectada para nomes: índice {col}")
+                            st.write(f"Coluna de nomes detectada: índice {col}")
+                            if tables[0] and len(tables[0]) > 1:
+                                row = tables[0][1]
+                                st.write("1ª linha (amostra):", row)
             except Exception as diag_exc:
-                st.write("Falha no diagnóstico:", diag_exc)
+                st.exception(diag_exc)
         return
 
     df = pd.DataFrame(names, columns=[COLUNA_NOME])

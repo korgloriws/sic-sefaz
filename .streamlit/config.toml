@@ -1,6 +1,8 @@
 [server]
 enableCORS = true
 enableXsrfProtection = false
+maxUploadSize = 200
+maxMessageSize = 200
 
 # Tema padrão (light). Use [theme.dark] para modo escuro no menu do Streamlit.
 [theme]
