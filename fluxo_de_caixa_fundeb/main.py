@@ -6,7 +6,8 @@ from typing import Optional, Tuple
 
 import pandas as pd
 import streamlit as st
-import plotly.express as px
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import re
 from streamlit.components.v1 import html as components_html
 import hashlib
@@ -902,6 +903,64 @@ def format_currency(v: float) -> str:
     return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def build_receita_despesa_comparison_chart(
+    series_df: pd.DataFrame,
+    title: str = "Comparativo Receita x Despesa",
+) -> plt.Figure:
+    fig, ax = plt.subplots(figsize=(8, 4))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+
+    if series_df.empty:
+        ax.set_title(title, fontweight="bold")
+        ax.set_xlabel("Data")
+        ax.set_ylabel("Valor (R$)")
+        ax.grid(True, alpha=0.2)
+        return fig
+
+    work = series_df.sort_values("data").copy()
+    work["data"] = pd.to_datetime(work["data"])
+    work["receita"] = work.get("receita", 0.0).astype(float)
+    work["despesa"] = work.get("despesa", 0.0).astype(float)
+    work["saldo"] = work["receita"] - work["despesa"]
+
+    color_receita = "#16A34A"
+    color_despesa = "#DC2626"
+
+    ax.plot(work["data"], work["receita"], color=color_receita, linewidth=2.6, label="Receita")
+    ax.plot(work["data"], work["despesa"], color=color_despesa, linewidth=2.6, label="Despesa")
+
+    # Área entre linhas evidencia quem ficou maior no dia (comparação direta)
+    ax.fill_between(
+        work["data"],
+        work["receita"],
+        work["despesa"],
+        where=work["saldo"] >= 0,
+        color=color_receita,
+        alpha=0.16,
+        interpolate=True,
+    )
+    ax.fill_between(
+        work["data"],
+        work["receita"],
+        work["despesa"],
+        where=work["saldo"] < 0,
+        color=color_despesa,
+        alpha=0.16,
+        interpolate=True,
+    )
+
+    ax.set_title(title, fontweight="bold")
+    ax.set_xlabel("Data")
+    ax.set_ylabel("Valor (R$)")
+    ax.grid(True, alpha=0.2)
+    ax.legend(loc="upper left", frameon=False)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m"))
+    fig.autofmt_xdate()
+    plt.tight_layout()
+    return fig
+
+
 def export_excel(receita_form: pd.DataFrame, despesa_form: pd.DataFrame, resumo_diario: pd.DataFrame) -> Tuple[bytes, str]:
     buffer = io.BytesIO()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1303,6 +1362,22 @@ def main() -> None:
     if not filtrado.empty:
         filtrado["data"] = pd.to_datetime(filtrado["data"]).dt.date
         filtrado["realizado"] = filtrado["valor2"].apply(_parse_number_value)
+        resumo_grafico = (
+            filtrado.groupby(["data", "tipo"], as_index=False)[["realizado"]]
+            .sum()
+            .pivot(index="data", columns="tipo", values="realizado")
+            .fillna(0.0)
+            .reset_index()
+            .sort_values("data")
+        )
+        resumo_grafico["receita"] = resumo_grafico.get("receita", 0.0)
+        resumo_grafico["despesa"] = resumo_grafico.get("despesa", 0.0)
+
+        st.markdown("### Comparativo Receita x Despesa")
+        st.markdown("As duas curvas no mesmo gráfico para facilitar comparação diária.")
+        fig_comp = build_receita_despesa_comparison_chart(resumo_grafico)
+        st.pyplot(fig_comp, use_container_width=True)
+        plt.close(fig_comp)
 
         # Tabela de visualização com todos os dados filtrados
         st.markdown("### Tabela de Visualização")
