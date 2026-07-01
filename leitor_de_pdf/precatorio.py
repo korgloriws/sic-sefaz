@@ -1,5 +1,4 @@
 import re
-import locale
 import pandas as pd
 import datetime
 import pdfplumber
@@ -9,13 +8,19 @@ import io
 from fpdf import FPDF  
 
 
-try:
-    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
-except locale.Error:
-    try:
-        locale.setlocale(locale.LC_ALL, 'pt_BR')
-    except locale.Error:
-        locale.setlocale(locale.LC_ALL, '')
+def parse_br_number(value: str) -> float:
+    """Converte '1.234,56' para float sem depender do locale do sistema."""
+    s = str(value).strip().replace(" ", "")
+    if "," in s and "." in s:
+        s = s.replace(".", "").replace(",", ".")
+    elif "," in s:
+        s = s.replace(",", ".")
+    return float(s)
+
+
+def format_br_currency(value: float) -> str:
+    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
 
 def process_pdf(file):
     sum_resgate = 0
@@ -34,25 +39,25 @@ def process_pdf(file):
                 if re.search(r'resgate,', line, re.IGNORECASE):
                     match = re.search(r'(\d{1,3}(?:\.\d{3})*,\d{2})', line)
                     if match:
-                        valor = locale.atof(match.group(1))
+                        valor = parse_br_number(match.group(1))
                         sum_resgate += valor
 
                 if re.search(r'aplicacao', line, re.IGNORECASE):
                     match = re.search(r'(\d{1,3}(?:\.\d{3})*,\d{2})', line)
                     if match:
-                        valor = locale.atof(match.group(1))
+                        valor = parse_br_number(match.group(1))
                         sum_aplicacao += valor
 
                 if re.search(r'rendimento', line, re.IGNORECASE):
                     match = re.search(r'(\d{1,3}(?:\.\d{3})*,\d{2})', line)
                     if match:
-                        valor = locale.atof(match.group(1))
+                        valor = parse_br_number(match.group(1))
                         sum_rendimento += valor
 
                 if re.search(r'estorno de re', line, re.IGNORECASE):
                     match = re.search(r'(\d{1,3}(?:\.\d{3})*,\d{2})', line)
                     if match:
-                        valor = locale.atof(match.group(1))
+                        valor = parse_br_number(match.group(1))
                         sum_estorno_de_re += valor
 
     data = {
@@ -60,7 +65,7 @@ def process_pdf(file):
         'Total': [sum_resgate, sum_aplicacao, sum_rendimento, sum_estorno_de_re]
     }
     df = pd.DataFrame(data)
-    df['Total'] = df['Total'].apply(lambda x: locale.currency(x, grouping=True))
+    df['Total'] = df['Total'].apply(format_br_currency)
     return df
 
 def to_excel(df):
