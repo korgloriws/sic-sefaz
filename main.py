@@ -34,7 +34,7 @@ from fontes_co.main import main as main31 #VV
 from somatorioMscBancoContaFonte.index3 import main as main32 #VV
 from comparacao_saldo_encerramento.main import main as main33 #VV
 from totalizador_ctb_fonte.main import main as main34 #VV
-from depositos_judiciais.main import main as main35 #VV
+from depositos_judiciais.deposito import main as main35 #VV
 from relacao_trabalhadores_fgts.mainLinux import main as main36 #VV
 from extrator_valor_nota_produto.main import main as main38 #VV
 from comparador_de_pcasps.main import main as main39 # VV
