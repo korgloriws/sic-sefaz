@@ -48,6 +48,7 @@ from conferencia_balancete.app import main as main46
 from ctb_vs_PosicaodeBancosPorFonte.main import main as main47
 from Formulario_credor.main_pessoa_fisica import main as main48
 from apuracao_saldo_patrimonial.apuracao_saldo_patrimonial import main as main49
+from diferenca_combustive.app import main as main50
 
 
 
@@ -58,7 +59,7 @@ categorias_programas = {
         'Geradores De relatórios': ['Precatório', 'Formulário de credor / IR RFB', 'Formulário de credor / IR RFB Pessoa Física', 'Apuração de saldo patrimonial',
         'Comparação dos saldos de encerramento','Comparador de PCASPs'],
         'Conciliações Mensais': ['Balancete da Câmara VS o Balancete do SICOF', 'DED Câmara VS DED SICOF',  'Restos a pagar Câmara VS SICOF',
-        'Comparador crédito e débito', 'DDR','Comparador de recursos disponíveis','Conferência de Balancete para saldos invertidos'],
+        'Comparador crédito e débito', 'DDR','Comparador de recursos disponíveis','Conferência de Balancete para saldos invertidos','Diferença Combustível'],
     },
     'Módulo de prestação de contas': {
         
@@ -130,6 +131,7 @@ programas_funcoes = {
     'CTB x Posicao de Bancos por Fonte': main47,
     'Formulário de credor / IR RFB Pessoa Física': main48,
     'Apuração de saldo patrimonial': main49,
+    'Diferença Combustível': main50,
 }
 
 
