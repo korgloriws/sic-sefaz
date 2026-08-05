@@ -1,4 +1,7 @@
-streamlit==1.32.0
+streamlit>=1.59,<1.62
+# starlette 1.4.0 tornou 'thread_minimum_size' obrigatorio no GZipResponder,
+# quebrando o servidor do Streamlit no deploy
+starlette<1.4.0
 pandas==2.2.0
 openpyxl==3.1.2
 xlsxwriter==3.1.9
