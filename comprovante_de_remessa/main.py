@@ -16,6 +16,19 @@ def extract_document_number(text):
     return None
 
 
+def format_nap_number(document_number: str) -> str:
+    """Remove 4 primeiros dígitos (data) e 2 últimos do número do documento."""
+    digits = re.sub(r"\D", "", str(document_number))
+    if len(digits) > 6:
+        return digits[4:-2]
+    return digits
+
+
+def build_output_filename(document_number: str) -> str:
+    nap = format_nap_number(document_number)
+    return f"comprovante_NAP_{nap}.pdf"
+
+
 def extract_text_from_page(pdf_path, page_number):
 
     try:
@@ -44,7 +57,7 @@ def process_pdf_page(pdf_path, page_number, output_dir):
         return None, f"Número do documento não encontrado na página {page_number + 1}"
     
 
-    output_filename = f"documento_{document_number}_pagina_{page_number + 1}.pdf"
+    output_filename = build_output_filename(document_number)
     output_path = os.path.join(output_dir, output_filename)
     
 
