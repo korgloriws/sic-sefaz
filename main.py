@@ -39,7 +39,7 @@ from relacao_trabalhadores_fgts.mainLinux import main as main36 #VV
 from extrator_valor_nota_produto.main import main as main38 #VV
 from comparador_de_pcasps.main import main as main39 # VV
 from posicaoFonte_vs_msc.app import main as main40 #VV
-from nota_servico_sepat.extrator_nfse import main as main41 
+from nota_servico_sepat.extrator_nfse_julho import main as main41 
 from disponibilidade_caixa.main import main as main42 #VV
 from comprovante_de_remessa.main import main as main43 
 from fluxo_de_caixa_fundeb.main import main as main44 
