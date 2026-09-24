@@ -445,15 +445,17 @@ def compute_campos(df_990: pd.DataFrame, df_balancete: pd.DataFrame) -> List[flo
         if fallback4 != 0.0:
             campo4 = fallback4
  
-    campo5 = _sum_diff_for_prefix(dfbal_std, allowed_codes_t5, "8211101", match_mode="prefix")
+    # (e) RP não Processados a Liquidar (6.3.1.1...) → B6
+    campo5 = _sum_diff_for_prefix(dfbal_std, allowed_codes_t5, "6311", match_mode="prefix")
     if campo5 == 0.0:
-        fallback5 = _sum_diff_prefix_only(dfbal_std, "8211101")
+        fallback5 = _sum_diff_prefix_only(dfbal_std, "6311")
         if fallback5 != 0.0:
             campo5 = fallback5
 
-    campo6 = _sum_diff_for_prefix(dfbal_std, allowed_codes_t5, "6311", match_mode="prefix")
+    # (f) Disponibilidade por Destinação De Recursos (8211101) → B8
+    campo6 = _sum_diff_for_prefix(dfbal_std, allowed_codes_t5, "8211101", match_mode="prefix")
     if campo6 == 0.0:
-        fallback6 = _sum_diff_prefix_only(dfbal_std, "6311")
+        fallback6 = _sum_diff_prefix_only(dfbal_std, "8211101")
         if fallback6 != 0.0:
             campo6 = fallback6
 
@@ -573,7 +575,8 @@ def compute_campos_with_details(
     det4["campo"] = 4
 
 
-    prefix = _norm_code("8211101")
+    # (e) RP não Processados a Liquidar (6.3.1.1...) → B6
+    prefix = _norm_code("6311")
     mask_prefix = bal_codes.str.startswith(prefix)
     if allowed_t5_all:
         allowed_list = list(allowed_t5_all)
@@ -589,7 +592,8 @@ def compute_campos_with_details(
         det5_total = float(det5["valor"].sum()) if not det5.empty else 0.0
     det5["campo"] = 5
 
-    prefix = _norm_code("6311")
+    # (f) Disponibilidade por Destinação De Recursos (8211101) → B8
+    prefix = _norm_code("8211101")
     mask_prefix = bal_codes.str.startswith(prefix)
     if allowed_t5_all:
         allowed_list = list(allowed_t5_all)
@@ -694,8 +698,8 @@ def main() -> None:
                 "Campo 2 (prefixo 2, cr\u00e9dito atual)",
                 "Campo 3 (prefixo 6221301, cr\u00e9dito atual)",
                 "Campo 4 (prefixo 63171, cr\u00e9dito atual)",
-                "Campo 5 (prefixo 8211101, cr\u00e9dito atual)",
-                "Campo 6 (prefixo 6311, cr\u00e9dito atual)",
+                "Campo 5 / (e) (prefixo 6311, RP n\u00e3o Processados a Liquidar)",
+                "Campo 6 / (f) (prefixo 8211101, Disponibilidade por Destina\u00e7\u00e3o)",
             ]
             st.dataframe(
                 pd.DataFrame({"Campo": labels, "Valor": valores}),
