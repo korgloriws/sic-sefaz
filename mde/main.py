@@ -16,7 +16,7 @@ def process_ded(file_path):
     df['fonte'] = df['fonte'].astype(str)
     df['liq_ate_mes'] = df['liq_ate_mes'].str.replace('.', '').str.replace(',', '.').astype(float)
     df['pag_ate_mes'] = pd.to_numeric(df['pag_ate_mes'].str.replace('.', '').str.replace(',', '.'), errors='coerce')
-    fontes_especificas = ['1500701', '2500701', '31500701', '51500701', '2500701', '21540770', '22540770',"22546770"]
+    fontes_especificas = ['1500701', '2500701', '31500701', '51500701', '2500701', '21540770', '22540770',"22546770","22546000"]
     df_filtrado = df[df['fonte'].isin(fontes_especificas)]
     resultado = df_filtrado.groupby('fonte')[['liq_ate_mes', 'pag_ate_mes']].sum()
     return resultado.reset_index()
@@ -148,7 +148,7 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
                 '9500000000','9517115111','9517115201','9517215001','9517215101','9517215201' ,]:
                 soma_valores_G56 += row.VR_ARREC_ATE_MES_FONTE
 
-            elif row.CODIGO_RECEITA in ['1751000000','1751500000','1751500100','1751500100','9817515001']:
+            elif row.CODIGO_RECEITA in ['1751000000','1751500000','1751500100','1751500100','9817515001','9917515001']:
                 soma_valores_G57 += row.VR_ARREC_ATE_MES_FONTE
 
             if row.CODIGO_RECEITA == '1321011100':
@@ -212,7 +212,7 @@ def fill_MDE(file_path, qgr_data=None, ded_data=None, rpnp_data=None, rpp_1619_d
             elif row.fonte in ['21540770', '21540000']:
 
                 soma_valores_G67 += row.liq_ate_mes
-            elif row.fonte in ['22540770', '22540000','22546770']:
+            elif row.fonte in ['22540770', '22540000','22546770','22546000']:
 
                 soma_valores_G71 += row.pag_ate_mes
 
