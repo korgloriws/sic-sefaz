@@ -415,13 +415,18 @@ def _renderizar_resultado(
         _formatar_moeda_br(float(resultado["recurso_disponivel"].sum())),
     )
 
+    # Relatorio (tela + arquivo): corrige inversao de recurso_disponivel e Diferenca
+    relatorio = resultado.copy()
+    relatorio["recurso_disponivel"] = resultado["Diferenca"]
+    relatorio["Diferenca"] = resultado["recurso_disponivel"]
+
     st.dataframe(
-        resultado,
+        relatorio,
         use_container_width=True,
         hide_index=True,
     )
 
-    csv_bytes = resultado.to_csv(index=False, sep=";", decimal=",").encode(
+    csv_bytes = relatorio.to_csv(index=False, sep=";", decimal=",").encode(
         "iso-8859-1",
         errors="replace",
     )
